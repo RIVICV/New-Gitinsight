@@ -12,24 +12,24 @@ async function getDashboardData(accessToken: string) {
   const octokit = new Octokit({ auth: accessToken })
 
   try {
-    // 1. 先获取用户信息
+    // 先获取用户信息
     const userData = await octokit.users.getAuthenticated()
     
-    // 2. 获取仓库列表
+    // 获取仓库列表
     const reposData = await octokit.repos.listForAuthenticatedUser({ 
       per_page: 100,
       sort: "updated",
     })
 
-    // 3. 获取用户事件 - 使用正确的方法
+    // ✅ 修复：使用 listEventsForAuthenticatedUser
     const eventsData = await octokit.activity.listEventsForAuthenticatedUser({
       username: userData.data.login,
       per_page: 50,
     })
 
-    // 4. 获取 PR 数量
+    // ✅ 修复：添加类型注解
     const reposWithPRs = await Promise.all(
-      reposData.data.map(async (repo) => {
+      reposData.data.map(async (repo: any) => {
         try {
           const pulls = await octokit.pulls.list({
             owner: repo.owner.login,
@@ -70,9 +70,10 @@ export default async function OverviewPage() {
 
   const data = await getDashboardData(session.accessToken)
 
-  const totalStars = data.repos.reduce((acc, repo) => acc + repo.stargazers_count, 0)
-  const totalForks = data.repos.reduce((acc, repo) => acc + repo.forks_count, 0)
-  const totalPRs = data.repos.reduce((acc, repo) => acc + (repo.total_pulls || 0), 0)
+  // ✅ 修复：添加类型注解
+  const totalStars = data.repos.reduce((acc: number, repo: any) => acc + repo.stargazers_count, 0)
+  const totalForks = data.repos.reduce((acc: number, repo: any) => acc + repo.forks_count, 0)
+  const totalPRs = data.repos.reduce((acc: number, repo: any) => acc + (repo.total_pulls || 0), 0)
 
   return (
     <Suspense fallback={<DashboardSkeleton />}>

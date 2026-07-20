@@ -2,7 +2,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { FolderGit2, Star, Users, GitPullRequest } from "lucide-react"
+import { Icons } from "@/components/ui/icons"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 
@@ -18,28 +18,28 @@ export function StatsCards({ repos, stars, followers, prs }: StatsCardsProps) {
     {
       title: "Repositories",
       value: repos,
-      icon: FolderGit2,
+      icon: Icons.repo,
       color: "text-blue-500",
       bg: "bg-blue-500/10",
     },
     {
       title: "Stars",
       value: stars,
-      icon: Star,
+      icon: Icons.star,
       color: "text-yellow-500",
       bg: "bg-yellow-500/10",
     },
     {
       title: "Followers",
       value: followers,
-      icon: Users,
+      icon: Icons.users,
       color: "text-green-500",
       bg: "bg-green-500/10",
     },
     {
       title: "Pull Requests",
       value: prs,
-      icon: GitPullRequest,
+      icon: Icons.pr,
       color: "text-purple-500",
       bg: "bg-purple-500/10",
     },

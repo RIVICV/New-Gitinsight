@@ -1,7 +1,7 @@
 // app/layout.tsx
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
-import "./globals.css"
+import "./globals.css"  // 这个警告可以忽略，不影响运行
 import { cn } from "@/lib/utils"
 import { Providers } from "./providers"
 

@@ -1,40 +1,36 @@
 // app/dashboard/repositories/page.tsx
 "use client"
 
-import { useState, useMemo } from "react"
 import { useSession } from "next-auth/react"
 import { useQuery } from "@tanstack/react-query"
+import { useState } from "react"
+import { 
+  Search, 
+  Star, 
+  GitFork, 
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight
+} from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table"
-import { Search, Star, GitFork, ExternalLink } from "lucide-react"
-import { GitHubRepo } from "@/types/github"
-import { formatDate, getLanguageColor } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 
-async function fetchRepos(accessToken: string): Promise<GitHubRepo[]> {
-  const response = await fetch("/api/github/repos", {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+async function fetchRepos(accessToken: string) {
+  const res = await fetch("/api/github/repos", {
+    headers: { Authorization: `Bearer ${accessToken}` }
   })
-  if (!response.ok) throw new Error("Failed to fetch repositories")
-  return response.json()
+  if (!res.ok) throw new Error("Failed to fetch")
+  return res.json()
 }
 
 export default function RepositoriesPage() {
   const { data: session } = useSession()
   const [search, setSearch] = useState("")
-  const [languageFilter, setLanguageFilter] = useState<string>("all")
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 10
 
   const { data: repos, isLoading } = useQuery({
     queryKey: ["repos"],
@@ -42,26 +38,47 @@ export default function RepositoriesPage() {
     enabled: !!session?.accessToken,
   })
 
-  // 获取所有语言
-  const languages = useMemo(() => {
-    if (!repos) return []
-    const langs = new Set(repos.map(repo => repo.language).filter(Boolean))
-    return ["all", ...Array.from(langs) as string[]]
-  }, [repos])
+  // 过滤
+  const filteredRepos = repos?.filter((repo: any) =>
+    repo.name.toLowerCase().includes(search.toLowerCase()) ||
+    (repo.description?.toLowerCase().includes(search.toLowerCase()) ?? false)
+  ) || []
 
-  // 过滤仓库
-  const filteredRepos = useMemo(() => {
-    if (!repos) return []
-    return repos.filter((repo) => {
-      const matchesSearch = repo.name.toLowerCase().includes(search.toLowerCase()) ||
-                           (repo.description?.toLowerCase().includes(search.toLowerCase()) ?? false)
-      const matchesLanguage = languageFilter === "all" || repo.language === languageFilter
-      return matchesSearch && matchesLanguage
-    })
-  }, [repos, search, languageFilter])
+  // 分页
+  const totalPages = Math.ceil(filteredRepos.length / pageSize)
+  const paginatedRepos = filteredRepos.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  )
+
+  // 获取语言颜色
+  const getLanguageColor = (language: string) => {
+    const colors: Record<string, string> = {
+      TypeScript: "#3178c6",
+      JavaScript: "#f1e05a",
+      Python: "#3572A5",
+      Go: "#00ADD8",
+      Rust: "#dea584",
+      Java: "#b07219",
+      HTML: "#e34c26",
+      CSS: "#563d7c",
+      Shell: "#89e051",
+      Vue: "#2c3e50",
+      React: "#61dafb",
+    }
+    return colors[language] || "#858585"
+  }
 
   if (isLoading) {
-    return <RepositoriesSkeleton />
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-10 w-full" />
+        {[...Array(5)].map((_, i) => (
+          <Skeleton key={i} className="h-20 w-full" />
+        ))}
+      </div>
+    )
   }
 
   return (
@@ -69,145 +86,100 @@ export default function RepositoriesPage() {
       <div>
         <h1 className="text-3xl font-bold">Repositories</h1>
         <p className="text-muted-foreground">
-          Manage and explore your GitHub repositories
+          {filteredRepos.length} repositories found
         </p>
       </div>
 
-      {/* 搜索和过滤 */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search repositories..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <div className="flex gap-2">
-          {languages.map((lang) => (
-            <Badge
-              key={lang}
-              variant={languageFilter === lang ? "default" : "outline"}
-              className="cursor-pointer"
-              onClick={() => setLanguageFilter(lang)}
-            >
-              {lang === "all" ? "All" : lang}
-            </Badge>
-          ))}
-        </div>
+      {/* 搜索框 */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Search repositories..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-10"
+        />
       </div>
 
-      {/* 结果统计 */}
-      <p className="text-sm text-muted-foreground">
-        Showing {filteredRepos.length} of {repos?.length || 0} repositories
-      </p>
-
-      {/* 表格 */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Repository</TableHead>
-                <TableHead>Language</TableHead>
-                <TableHead className="text-right">Stars</TableHead>
-                <TableHead className="text-right">Forks</TableHead>
-                <TableHead className="text-right">Issues</TableHead>
-                <TableHead className="text-right">Updated</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredRepos.map((repo) => (
-                <TableRow key={repo.id}>
-                  <TableCell>
-                    <a
-                      href={repo.html_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 hover:text-primary"
-                    >
-                      <span className="font-medium">{repo.name}</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                    {repo.description && (
-                      <p className="text-sm text-muted-foreground truncate max-w-md">
-                        {repo.description}
-                      </p>
-                    )}
-                  </TableCell>
-                  <TableCell>
+      {/* 仓库列表 */}
+      <div className="space-y-3">
+        {paginatedRepos.map((repo: any) => (
+          <Card key={repo.id}>
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <a
+                    href={repo.html_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 font-medium hover:text-primary hover:underline"
+                  >
+                    {repo.name}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  {repo.description && (
+                    <p className="text-sm text-muted-foreground">
+                      {repo.description}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-4 text-sm">
                     {repo.language && (
-                      <div className="flex items-center gap-2">
+                      <span className="flex items-center gap-1.5">
                         <span
                           className="w-3 h-3 rounded-full"
                           style={{ backgroundColor: getLanguageColor(repo.language) }}
                         />
-                        <span>{repo.language}</span>
-                      </div>
+                        {repo.language}
+                      </span>
                     )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Star className="w-4 h-4 text-yellow-500" />
+                    <span className="flex items-center gap-1">
+                      <Star className="w-3.5 h-3.5 text-yellow-500" />
                       {repo.stargazers_count}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <GitFork className="w-4 h-4 text-muted-foreground" />
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <GitFork className="w-3.5 h-3.5" />
                       {repo.forks_count}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant={repo.open_issues_count > 0 ? "destructive" : "secondary"}>
-                      {repo.open_issues_count}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right text-sm text-muted-foreground">
-                    {formatDate(repo.updated_at)}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filteredRepos.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    No repositories found
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
+                    </span>
+                    <span>Updated {new Date(repo.updated_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+                {repo.open_issues_count > 0 && (
+                  <Badge variant="destructive">
+                    {repo.open_issues_count} issues
+                  </Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-function RepositoriesSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-4 w-64 mt-2" />
-      </div>
-      <div className="flex flex-col gap-4 sm:flex-row">
-        <Skeleton className="h-10 flex-1" />
-        <div className="flex gap-2">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-6 w-16" />
-          ))}
+      {/* 分页 */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {currentPage} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+          >
+            Next
+            <ChevronRight className="w-4 h-4" />
+          </Button>
         </div>
-      </div>
-      <Card>
-        <CardContent className="p-0">
-          <div className="space-y-2 p-4">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-16 w-full" />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      )}
     </div>
   )
 }

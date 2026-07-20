@@ -1,6 +1,5 @@
 // components/ui/icons.tsx
 import { 
-  Github,  // 如果还是报错，改成 GitHub
   LayoutDashboard, 
   FolderGit2,
   GitPullRequest, 
@@ -14,10 +13,10 @@ import {
   GitBranch,
   Zap
 } from "lucide-react"
+import { GithubIcon } from "./github-icon"
 
-// 重新导出，统一命名
 export const Icons = {
-  github: Github,
+  github: GithubIcon,  // 使用自定义 SVG
   dashboard: LayoutDashboard,
   repo: FolderGit2,
   pr: GitPullRequest,
