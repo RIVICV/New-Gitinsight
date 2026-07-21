@@ -1,61 +1,85 @@
 // app/api/github/analytics/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { Octokit } from "@octokit/rest"
+// ✅ 使用默认导入
+import AnalyticsService from "@/services/analytics.service"
 
 export async function GET(request: NextRequest) {
   const token = request.headers.get("authorization")?.replace("Bearer ", "")
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
 
   try {
     const octokit = new Octokit({ auth: token })
-    const { data: repos } = await octokit.repos.listForAuthenticatedUser({ per_page: 100 })
     
-    // 语言统计
-    const langMap: Record<string, number> = {}
-    for (const repo of repos) {
-      try {
-        const langs = await octokit.repos.listLanguages({
-          owner: repo.owner.login,
-          repo: repo.name,
-        })
-        for (const [lang, bytes] of Object.entries(langs.data)) {
-          langMap[lang] = (langMap[lang] || 0) + bytes
+    const userData = await octokit.users.getAuthenticated()
+    const reposData = await octokit.repos.listForAuthenticatedUser({ per_page: 100 })
+    const eventsData = await octokit.activity.listEventsForAuthenticatedUser({
+      username: userData.data.login,
+      per_page: 100,
+    })
+
+    const repos = reposData.data.map((repo: any) => ({
+      ...repo,
+      total_pulls: 0,
+    }))
+
+    const metrics = AnalyticsService.getEngineeringMetrics(
+      userData.data,
+      repos,
+      eventsData.data as any[]
+    )
+
+    // 语言分布
+    const languages = await Promise.all(
+      reposData.data.map(async (repo: any) => {
+        try {
+          const langs = await octokit.repos.listLanguages({
+            owner: repo.owner.login,
+            repo: repo.name,
+          })
+          return langs.data
+        } catch {
+          return {}
         }
-      } catch {}
-    }
-    
-    const totalBytes = Object.values(langMap).reduce((a, b) => a + b, 0)
-    const languages = Object.entries(langMap)
+      })
+    )
+
+    const langMap: Record<string, number> = {}
+    languages.forEach((lang: any) => {
+      Object.entries(lang).forEach(([name, bytes]) => {
+        if (typeof bytes === 'number') {
+          langMap[name] = (langMap[name] || 0) + bytes
+        }
+      })
+    })
+
+    const totalBytes = Object.values(langMap).reduce((a: number, b: number) => a + b, 0)
+    const languageDistribution = Object.entries(langMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
-      .map(([name, value]) => ({
+      .map(([name, bytes]) => ({
         name,
-        value,
-        percent: value / totalBytes,
+        value: bytes,
+        percentage: Math.round((bytes / totalBytes) * 100),
       }))
 
-    // 模拟数据
-    const weeklyCommits = [
-      { day: "Mon", commits: 12 },
-      { day: "Tue", commits: 19 },
-      { day: "Wed", commits: 15 },
-      { day: "Thu", commits: 22 },
-      { day: "Fri", commits: 8 },
-      { day: "Sat", commits: 5 },
-      { day: "Sun", commits: 3 },
-    ]
-
-    const repoGrowth = [
-      { date: "Jan", count: 2 },
-      { date: "Feb", count: 4 },
-      { date: "Mar", count: 5 },
-      { date: "Apr", count: 7 },
-      { date: "May", count: 8 },
-      { date: "Jun", count: 10 },
-    ]
-
-    return NextResponse.json({ languages, weeklyCommits, repoGrowth })
+    return NextResponse.json({
+      user: userData.data,
+      repos: reposData.data,
+      events: eventsData.data,
+      metrics,
+      languageDistribution,
+      totalRepos: reposData.data.length,
+      totalStars: reposData.data.reduce((acc: number, r: any) => acc + r.stargazers_count, 0),
+      totalForks: reposData.data.reduce((acc: number, r: any) => acc + r.forks_count, 0),
+    })
   } catch (error) {
-    return NextResponse.json({ error: "Failed" }, { status: 500 })
+    console.error("Analytics error:", error)
+    return NextResponse.json(
+      { error: "Failed to generate analytics" },
+      { status: 500 }
+    )
   }
 }

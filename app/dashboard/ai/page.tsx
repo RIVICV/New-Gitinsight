@@ -2,13 +2,22 @@
 "use client"
 
 import { useSession } from "next-auth/react"
+import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
-import { Sparkles, Loader2, FileText, GitPullRequest, BookOpen, User } from "lucide-react"
+import { Sparkles, Loader2, FileText, BookOpen, User, TrendingUp } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import AIService from "@/services/ai.service"
+import AIContextBuilder from "@/services/ai-context-builder"
 
-// 移除 Textarea 导入，因为这里不需要
+async function fetchAIData(accessToken: string) {
+  const res = await fetch("/api/github/analytics", {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  })
+  if (!res.ok) throw new Error("Failed to fetch")
+  return res.json()
+}
 
 export default function AIPage() {
   const { data: session } = useSession()
@@ -16,114 +25,79 @@ export default function AIPage() {
   const [result, setResult] = useState("")
   const [activeFeature, setActiveFeature] = useState<string | null>(null)
 
+  const { data: analyticsData } = useQuery({
+    queryKey: ["ai-analytics"],
+    queryFn: () => fetchAIData(session?.accessToken!),
+    enabled: !!session?.accessToken,
+  })
+
   const features = [
     {
       id: "analyze",
-      icon: Sparkles,
+      icon: TrendingUp,
       label: "Analyze Profile",
       description: "Get AI-powered insights about your coding habits",
-      prompt: "Analyze my GitHub profile and provide insights about my coding patterns"
     },
     {
       id: "readme",
       icon: FileText,
       label: "Generate README",
       description: "AI-generate a README for your repository",
-      prompt: "Generate a professional README for my GitHub repository"
     },
     {
       id: "summary",
       icon: User,
       label: "Developer Summary",
       description: "Generate a summary of your developer profile",
-      prompt: "Generate a professional developer summary based on my GitHub activity"
     },
     {
       id: "releasenotes",
       icon: BookOpen,
       label: "Release Notes",
       description: "Generate release notes from commits",
-      prompt: "Generate release notes based on my recent commits"
     },
   ]
 
-  const handleFeatureClick = async (feature: any) => {
-    setActiveFeature(feature.id)
+  const handleFeatureClick = async (featureId: string) => {
+    setActiveFeature(featureId)
     setLoading(true)
     setResult("")
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      const responses: Record<string, string> = {
-        analyze: `### 📊 AI Analysis Results
-
-**Top Languages:** TypeScript, Python, JavaScript
-**Strengths:** Frontend development, API design
-**Improvement Areas:** Test coverage, documentation
-
-You've been most active in the last 30 days with 45 commits across 12 repositories. Your peak coding hours are between 10:00 AM and 4:00 PM.
-
-**Recommendations:**
-- Increase test coverage in your projects
-- Consider contributing to open source
-- Document your API endpoints`,
-        readme: `# Project Name
-
-## Description
-This is an AI-generated README for your project.
-
-## Features
-- Feature 1: Description
-- Feature 2: Description
-- Feature 3: Description
-
-## Installation
-\`\`\`bash
-npm install
-npm run dev
-\`\`\`
-
-## Tech Stack
-- Next.js
-- TypeScript
-- Tailwind CSS
-
-## License
-MIT`,
-        summary: `### 👨‍💻 Developer Summary
-
-**Senior Frontend Engineer** with 5+ years of experience
-
-**Core Competencies:**
-- React / Next.js ecosystem
-- TypeScript / JavaScript
-- API Design & Integration
-- UI/UX Development
-
-**Recent Achievements:**
-- 45+ commits in the last 30 days
-- 12 active repositories
-- Leading frontend architecture decisions
-
-**Open to:** Full-stack development roles, technical leadership positions`,
-        releasenotes: `### 📝 Release Notes v1.2.0
-
-**New Features:**
-- Added dark mode support
-- Implemented search functionality
-- Improved performance metrics
-
-**Bug Fixes:**
-- Fixed authentication flow
-- Resolved layout issues on mobile
-
-**Improvements:**
-- Updated dependencies
-- Optimized bundle size`,
+      if (!analyticsData) {
+        setResult("Please wait for data to load...")
+        return
       }
 
-      setResult(responses[feature.id] || "AI analysis complete!")
+      const { user, repos, events, metrics } = analyticsData
+
+      const context = AIContextBuilder.buildContext(user, repos, events, metrics)
+
+      let response = ""
+      switch (featureId) {
+        case "analyze":
+          response = await AIService.generateInsight(context)
+          break
+        case "summary":
+          response = await AIService.generateResumeSummary(context)
+          break
+        case "readme":
+          const firstRepo = repos[0] || { name: "my-project", description: "A modern software project" }
+          const languages = metrics.technologyProfile.languages.map((l: any) => l.name)
+          response = await AIService.generateRepositoryReadme(
+            firstRepo.name,
+            firstRepo.description,
+            languages
+          )
+          break
+        case "releasenotes":
+          response = "## Release Notes v1.0.0\n\n### Features\n- Initial release\n- GitHub integration\n- AI-powered insights\n\n### Improvements\n- Optimized performance\n- Enhanced user experience"
+          break
+        default:
+          response = "Feature not implemented yet."
+      }
+
+      setResult(response)
     } catch (error) {
       setResult("Error generating AI response. Please try again.")
     } finally {
@@ -150,7 +124,7 @@ MIT`,
               className={`cursor-pointer transition-all hover:border-primary ${
                 isActive ? "border-primary border-2" : ""
               }`}
-              onClick={() => handleFeatureClick(feature)}
+              onClick={() => handleFeatureClick(feature.id)}
             >
               <CardContent className="p-4 flex items-start gap-4">
                 <div className="p-2 rounded-lg bg-primary/10">
