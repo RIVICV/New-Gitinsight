@@ -123,10 +123,9 @@ export async function GET(request: NextRequest) {
       { date: 'Jun', count: 10 },
     ]
 
-    // ✅ 基于真实数据计算指标
+    // 基于真实数据计算指标
     const totalCommits = eventsData.data.filter((e: any) => e.type === 'PushEvent').length
     
-    // 生产力得分
     const avgCommitsPerRepo = reposData.data.length > 0 ? totalCommits / reposData.data.length : 0
     const productivityScore = Math.min(
       Math.round(
@@ -137,7 +136,6 @@ export async function GET(request: NextRequest) {
       100
     )
 
-    // 一致性得分
     const commitDays = new Set(
       eventsData.data
         .filter((e: any) => e.type === 'PushEvent')
@@ -150,7 +148,6 @@ export async function GET(request: NextRequest) {
       100
     )
 
-    // 仓库健康得分
     let healthScore = 0
     reposData.data.forEach((repo: any) => {
       if (repo.description) healthScore += 5
@@ -163,7 +160,6 @@ export async function GET(request: NextRequest) {
     })
     healthScore = Math.min(Math.round(healthScore / (reposData.data.length || 1) * 2), 100)
 
-    // 活动趋势
     const twoWeeksAgo = new Date(now)
     twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14)
     const fourWeeksAgo = new Date(now)
@@ -188,7 +184,6 @@ export async function GET(request: NextRequest) {
       else activityTrend = 'stable'
     }
 
-    // 生成推荐
     const recommendations: string[] = []
     if (reposData.data.some((r: any) => !r.description)) {
       recommendations.push('Add README files to your repositories')
@@ -229,7 +224,14 @@ export async function GET(request: NextRequest) {
       totalForks,
     }
     
-    return NextResponse.json(response)
+    // ✅ 添加禁用缓存的响应头
+    return NextResponse.json(response, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      }
+    })
     
   } catch (error) {
     console.error("❌ Analytics error:", error)

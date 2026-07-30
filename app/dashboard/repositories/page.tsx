@@ -10,7 +10,8 @@ import {
   GitFork, 
   ExternalLink,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  RefreshCw
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -18,12 +19,22 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 
-async function fetchRepos(accessToken: string) {
-  const res = await fetch("/api/github/repos", {
-    headers: { Authorization: `Bearer ${accessToken}` }
+// ✅ 导入 GitHubRepo 类型
+import { GitHubRepo } from "@/types/github"
+
+// ✅ 为 fetchRepos 添加类型
+// app/dashboard/repositories/page.tsx
+
+async function fetchRepos(accessToken: string): Promise<GitHubRepo[]> {
+  // ✅ 添加时间戳参数 _t，让每次请求的 URL 都不同
+  const timestamp = Date.now()
+  const response = await fetch(`/api/github/repos?_t=${timestamp}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
   })
-  if (!res.ok) throw new Error("Failed to fetch")
-  return res.json()
+  if (!response.ok) throw new Error("Failed to fetch repositories")
+  return response.json()
 }
 
 export default function RepositoriesPage() {
@@ -32,27 +43,27 @@ export default function RepositoriesPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 10
 
-  const { data: repos, isLoading } = useQuery({
+  const { data: repos, isLoading, refetch } = useQuery({
     queryKey: ["repos"],
     queryFn: () => fetchRepos(session?.accessToken!),
     enabled: !!session?.accessToken,
+    staleTime: 0,
+    gcTime: 0,
   })
 
-  // 过滤
-  const filteredRepos = repos?.filter((repo: any) =>
+  // ✅ 为 filter 添加类型
+  const filteredRepos = repos?.filter((repo: GitHubRepo) =>
     repo.name.toLowerCase().includes(search.toLowerCase()) ||
     (repo.description?.toLowerCase().includes(search.toLowerCase()) ?? false)
   ) || []
 
-  // 分页
   const totalPages = Math.ceil(filteredRepos.length / pageSize)
   const paginatedRepos = filteredRepos.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   )
 
-  // 获取语言颜色
-  const getLanguageColor = (language: string) => {
+  const getLanguageColor = (language: string | null) => {
     const colors: Record<string, string> = {
       TypeScript: "#3178c6",
       JavaScript: "#f1e05a",
@@ -64,9 +75,12 @@ export default function RepositoriesPage() {
       CSS: "#563d7c",
       Shell: "#89e051",
       Vue: "#2c3e50",
-      React: "#61dafb",
     }
-    return colors[language] || "#858585"
+    return language ? colors[language] || "#858585" : "#858585"
+  }
+
+  const handleRefresh = () => {
+    refetch()
   }
 
   if (isLoading) {
@@ -83,14 +97,19 @@ export default function RepositoriesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Repositories</h1>
-        <p className="text-muted-foreground">
-          {filteredRepos.length} repositories found
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Repositories</h1>
+          <p className="text-muted-foreground">
+            {filteredRepos.length} repositories found
+          </p>
+        </div>
+        <Button onClick={handleRefresh} size="sm" variant="outline">
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Refresh
+        </Button>
       </div>
 
-      {/* 搜索框 */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
@@ -101,9 +120,8 @@ export default function RepositoriesPage() {
         />
       </div>
 
-      {/* 仓库列表 */}
       <div className="space-y-3">
-        {paginatedRepos.map((repo: any) => (
+        {paginatedRepos.map((repo: GitHubRepo) => (
           <Card key={repo.id}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
@@ -154,7 +172,6 @@ export default function RepositoriesPage() {
         ))}
       </div>
 
-      {/* 分页 */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <Button

@@ -2,7 +2,7 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useEffect, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import {
   BarChart,
   Bar,
@@ -18,46 +18,69 @@ import {
   Line,
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
+import { RefreshCw } from "lucide-react"
 
 const COLORS = ["#6366f1", "#f59e0b", "#22c55e", "#ef4444", "#8b5cf6", "#ec4899"]
 
+// ✅ 添加时间戳参数，强制刷新
+async function fetchAnalytics(accessToken: string) {
+  const timestamp = Date.now()
+  const res = await fetch(`/api/github/analytics?_t=${timestamp}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+    },
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: "Unknown error" }))
+    throw new Error(error.error || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 export default function AnalyticsPage() {
   const { data: session, status } = useSession()
-  const [data, setData] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (status === "authenticated" && session?.accessToken) {
-      fetch("/api/github/analytics", {
-        headers: { "Authorization": `Bearer ${session.accessToken}` }
-      })
-        .then(res => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`)
-          return res.json()
-        })
-        .then(data => {
-          console.log("📊 Analytics Data:", data)
-          setData(data)
-          setLoading(false)
-        })
-        .catch(err => {
-          console.error("❌ Error:", err)
-          setError(err.message)
-          setLoading(false)
-        })
-    } else if (status === "unauthenticated") {
-      setLoading(false)
-    }
-  }, [status, session])
+  const { data: analytics, isLoading, error, refetch } = useQuery({
+    queryKey: ["analytics"],
+    queryFn: () => {
+      if (!session?.accessToken) {
+        throw new Error("No access token")
+      }
+      return fetchAnalytics(session.accessToken)
+    },
+    enabled: !!session?.accessToken && status === "authenticated",
+    staleTime: 0,
+    gcTime: 0,
+    retry: 1,
+  })
 
-  // 加载状态
-  if (loading) {
+  const handleRefresh = () => {
+    refetch()
+  }
+
+  if (status === "loading" || isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Loading analytics...</p>
+      <div className="space-y-4 p-6">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-10 w-24" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[...Array(2)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader><Skeleton className="h-6 w-32" /></CardHeader>
+              <CardContent><Skeleton className="h-64 w-full" /></CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     )
@@ -65,39 +88,44 @@ export default function AnalyticsPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64 p-6">
         <div className="text-center">
-          <p className="text-red-500">Error: {error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm"
-          >
+          <p className="text-red-500 font-medium">Failed to load analytics</p>
+          <p className="text-sm text-muted-foreground mt-2">{(error as Error).message}</p>
+          <Button onClick={handleRefresh} className="mt-4">
+            <RefreshCw className="w-4 h-4 mr-2" />
             Retry
-          </button>
+          </Button>
         </div>
       </div>
     )
   }
 
-  if (!data) {
+  if (!analytics) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">No data available</p>
+      <div className="flex items-center justify-center h-64 p-6">
+        <p className="text-muted-foreground">No analytics data available</p>
       </div>
     )
   }
 
-  const languageData = data.languageDistribution || []
-  const weeklyData = data.weeklyCommits || []
-  const repoGrowthData = data.repoGrowth || []
+  const languageData = analytics.languageDistribution || []
+  const weeklyData = analytics.weeklyCommits || []
+  const repoGrowthData = analytics.repoGrowth || []
 
   return (
     <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-3xl font-bold">Analytics</h1>
-        <p className="text-muted-foreground">
-          Visualize your GitHub activity and contributions
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Analytics</h1>
+          <p className="text-muted-foreground">
+            Visualize your GitHub activity and contributions
+          </p>
+        </div>
+        <Button onClick={handleRefresh} size="sm" variant="outline">
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Refresh
+        </Button>
       </div>
 
       {/* 统计卡片 */}
@@ -107,7 +135,7 @@ export default function AnalyticsPage() {
             <CardTitle className="text-sm text-muted-foreground">Total Repositories</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.totalRepos || 0}</div>
+            <div className="text-2xl font-bold">{analytics.totalRepos || 0}</div>
           </CardContent>
         </Card>
         <Card>
@@ -115,7 +143,7 @@ export default function AnalyticsPage() {
             <CardTitle className="text-sm text-muted-foreground">Total Stars</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.totalStars || 0}</div>
+            <div className="text-2xl font-bold">{analytics.totalStars || 0}</div>
           </CardContent>
         </Card>
         <Card>
@@ -123,12 +151,12 @@ export default function AnalyticsPage() {
             <CardTitle className="text-sm text-muted-foreground">Productivity Score</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">{data.metrics?.productivityScore || 0}</div>
+            <div className="text-2xl font-bold text-primary">{analytics.metrics?.productivityScore || 0}</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* 语言分布饼图 */}
+      {/* 语言分布 */}
       <Card>
         <CardHeader>
           <CardTitle>Language Distribution</CardTitle>
@@ -163,7 +191,7 @@ export default function AnalyticsPage() {
         </CardContent>
       </Card>
 
-      {/* ✅ 每周提交柱状图 - 显示数据 */}
+      {/* 每周提交 */}
       <Card>
         <CardHeader>
           <CardTitle>Weekly Commit Activity</CardTitle>
@@ -182,14 +210,14 @@ export default function AnalyticsPage() {
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground">
-                No commit activity data available. Start coding! 🚀
+                No commit activity data available
               </div>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* ✅ 仓库增长折线图 */}
+      {/* 仓库增长 */}
       <Card>
         <CardHeader>
           <CardTitle>Repository Growth</CardTitle>
@@ -215,7 +243,7 @@ export default function AnalyticsPage() {
         </CardContent>
       </Card>
 
-      {/* ✅ 工程指标 */}
+      {/* 工程指标 */}
       <Card>
         <CardHeader>
           <CardTitle>Engineering Metrics</CardTitle>
@@ -224,18 +252,18 @@ export default function AnalyticsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-4 border rounded-lg">
               <p className="text-sm text-muted-foreground">Productivity Score</p>
-              <p className="text-2xl font-bold text-primary">{data.metrics?.productivityScore || 0}</p>
+              <p className="text-2xl font-bold text-primary">{analytics.metrics?.productivityScore || 0}</p>
             </div>
             <div className="p-4 border rounded-lg">
               <p className="text-sm text-muted-foreground">Consistency Score</p>
-              <p className="text-2xl font-bold text-green-500">{data.metrics?.consistencyScore || 0}</p>
+              <p className="text-2xl font-bold text-green-500">{analytics.metrics?.consistencyScore || 0}</p>
             </div>
           </div>
-          {data.metrics?.repositoryHealth?.recommendations && (
+          {analytics.metrics?.repositoryHealth?.recommendations && (
             <div className="mt-4">
               <p className="text-sm font-medium mb-2">Recommendations</p>
               <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                {data.metrics.repositoryHealth.recommendations.map((rec: string, i: number) => (
+                {analytics.metrics.repositoryHealth.recommendations.map((rec: string, i: number) => (
                   <li key={i}>{rec}</li>
                 ))}
               </ul>
