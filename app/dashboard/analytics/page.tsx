@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { RefreshCw } from "lucide-react"
+import { GitCommit } from "lucide-react"
 
 const COLORS = ["#6366f1", "#f59e0b", "#22c55e", "#ef4444", "#8b5cf6", "#ec4899"]
 
@@ -209,13 +210,16 @@ export default function AnalyticsPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                No commit activity data available
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <GitCommit className="w-12 h-12 mb-3 opacity-30" />
+                <p className="text-sm font-medium">No commit activity found</p>
+                <p className="text-xs">Start coding to see your commit activity here</p>
               </div>
             )}
           </div>
         </CardContent>
       </Card>
+
 
       {/* 仓库增长 */}
       <Card>
