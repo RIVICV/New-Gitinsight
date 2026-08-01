@@ -17,14 +17,20 @@ import {
   Code2,
   Star,
   Award,
-  Target
+  Target,
+  GitBranch,
+  Zap,
+  Clock,
+  CheckCircle2,
+  BarChart3
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { AIService } from "@/services/ai.service"
 import AIContextBuilder from "@/services/ai-context-builder"
-import { ReadmeGenerator } from "@/services/readme-generator.service"
+import ReadmeGenerator from "@/services/readme-generator.service"
+import { cn } from "@/lib/utils"
 
 async function fetchAIData(accessToken: string) {
   const res = await fetch("/api/github/analytics", {
@@ -47,25 +53,22 @@ export default function AIPage() {
     enabled: !!session?.accessToken,
   })
 
-  // ============================================================
-  // 当数据加载完成后，默认选中第一个仓库
-  // ============================================================
+  // 数据加载完成后默认选中第一个仓库
   useEffect(() => {
     if (analyticsData?.repos && analyticsData.repos.length > 0 && !selectedRepo) {
-      console.log("📦 默认选中第一个仓库:", analyticsData.repos[0].name)
       setSelectedRepo(analyticsData.repos[0])
     }
   }, [analyticsData])
 
   // ============================================================
-  // 生成 AI 洞察
+  // 功能函数
   // ============================================================
+  
   const generateInsights = async () => {
     if (!analyticsData) return
     setLoading(true)
     setActiveFeature("analyze")
     setResult(null)
-
     try {
       const { user, repos, events, metrics } = analyticsData
       const context = AIContextBuilder.buildContext(user, repos, events, metrics)
@@ -78,15 +81,11 @@ export default function AIPage() {
     }
   }
 
-  // ============================================================
-  // 生成简历摘要
-  // ============================================================
   const generateResume = async () => {
     if (!analyticsData) return
     setLoading(true)
     setActiveFeature("resume")
     setResult(null)
-
     try {
       const { user, repos, events, metrics } = analyticsData
       const context = AIContextBuilder.buildContext(user, repos, events, metrics)
@@ -99,278 +98,95 @@ export default function AIPage() {
     }
   }
 
-  // ============================================================
-  // 生成 README - 使用当前选中的仓库
-  // ============================================================
-
-// 替换 generateReadme 函数
-const generateReadme = async () => {
-  console.log("🚀 generateReadme 被调用")
-  console.log("📦 当前选中的仓库:", selectedRepo)
-  
-  if (!analyticsData) {
-    console.log("❌ analyticsData 为空")
-    return
-  }
-  
-  // ✅ 使用当前选中的仓库
-  const repo = selectedRepo || analyticsData.repos[0]
-  console.log("📦 最终使用的仓库:", repo?.name)
-  
-  if (!repo) {
-    setResult("No repositories found. Please create a repository first.")
-    return
-  }
-
-  setLoading(true)
-  setActiveFeature("readme")
-  setResult(null)
-
-  try {
-    const { metrics } = analyticsData
-    const languages = metrics.technologyProfile.languages.map((l: any) => l.name)
-    
-    // ✅ 使用当前选中的仓库真实数据
-    const repoInfo = {
-      name: repo.name,
-      description: repo.description || "A modern software project",
-      languages: languages,
-      stars: repo.stargazers_count || 0,
-      forks: repo.forks_count || 0,
-      issues: repo.open_issues_count || 0,
-      createdAt: new Date(repo.created_at).toLocaleDateString(),
-      updatedAt: new Date(repo.updated_at).toLocaleDateString(),
-      url: repo.html_url,
-      owner: repo.owner?.login || analyticsData.user?.login || "yourusername",
-      topics: repo.topics || [],
-      defaultBranch: repo.default_branch || "main",
+  const generateReadme = async () => {
+    if (!analyticsData) return
+    const repo = selectedRepo || analyticsData.repos[0]
+    if (!repo) {
+      setResult("No repositories found. Please create a repository first.")
+      return
     }
-    
-    console.log("📝 生成的 README 信息:", repoInfo)
-
-    // ✅ 使用 ReadmeGenerator 生成 README（不依赖 AI）
-    const response = ReadmeGenerator.generate(repoInfo)
-    console.log("✅ README 生成成功，长度:", response.length)
-    setResult(response)
-  } catch (error) {
-    console.error("❌ README generation error:", error)
-    setResult("Error generating README. Please try again.")
-  } finally {
-    setLoading(false)
+    setLoading(true)
+    setActiveFeature("readme")
+    setResult(null)
+    try {
+      const { metrics } = analyticsData
+      const languages = metrics.technologyProfile.languages.map((l: any) => l.name)
+      const repoInfo = {
+        name: repo.name,
+        description: repo.description || "A modern software project",
+        languages: languages,
+        stars: repo.stargazers_count || 0,
+        forks: repo.forks_count || 0,
+        issues: repo.open_issues_count || 0,
+        createdAt: new Date(repo.created_at).toLocaleDateString(),
+        updatedAt: new Date(repo.updated_at).toLocaleDateString(),
+        url: repo.html_url,
+        owner: repo.owner?.login || analyticsData.user?.login || "yourusername",
+        topics: repo.topics || [],
+        defaultBranch: repo.default_branch || "main",
+      }
+      const response = ReadmeGenerator.generate(repoInfo)
+      setResult(response)
+    } catch (error) {
+      setResult("Error generating README. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }
-}
 
-  // ============================================================
-  // 生成发布说明
-  // ============================================================
-
-const generateReleaseNotes = async () => {
-  if (!analyticsData) return
-  setLoading(true)
-  setActiveFeature("release")
-  setResult(null)
-
-  try {
-    const { events, repos, user } = analyticsData
-    
-    // ============================================================
-    // 1. 提取提交信息
-    // ============================================================
-    const pushEvents = events.filter((e: any) => e.type === 'PushEvent')
-    const totalCommits = pushEvents.length
-    
-    // 获取最近 20 条提交（增加数量）
-    const recentCommits = pushEvents
-      .slice(0, 20)
-      .map((e: any) => ({
+  const generateReleaseNotes = async () => {
+    if (!analyticsData) return
+    setLoading(true)
+    setActiveFeature("release")
+    setResult(null)
+    try {
+      const { events, user } = analyticsData
+      const pushEvents = events.filter((e: any) => e.type === 'PushEvent')
+      const recentCommits = pushEvents.slice(0, 20).map((e: any) => ({
         message: e.payload?.commits?.[0]?.message || 'Update',
         sha: e.payload?.commits?.[0]?.sha?.slice(0, 7) || 'abc1234',
         date: new Date(e.created_at).toISOString().split('T')[0],
         repoName: e.repo?.name || 'unknown',
-        author: user?.login || 'developer',
-        url: `https://github.com/${user?.login}/${e.repo?.name?.split('/')[1] || ''}/commit/${e.payload?.commits?.[0]?.sha || ''}`
       }))
-      .filter((c: any) => c.message.length > 0)
 
-    // ============================================================
-    // 2. 分类提交
-    // ============================================================
-    const features: string[] = []
-    const fixes: string[] = []
-    const chores: string[] = []
-    const docs: string[] = []
-    const tests: string[] = []
-    const others: string[] = []
-
-    recentCommits.forEach((c: any) => {
-      const msg = c.message.toLowerCase()
-      if (msg.startsWith('feat') || msg.includes('add') || msg.includes('new')) {
-        features.push(`- ${c.message} (${c.repoName})`)
-      } else if (msg.startsWith('fix') || msg.includes('bug') || msg.includes('resolve') || msg.includes('repair')) {
-        fixes.push(`- ${c.message} (${c.repoName})`)
-      } else if (msg.startsWith('docs') || msg.includes('doc') || msg.includes('readme')) {
-        docs.push(`- ${c.message} (${c.repoName})`)
-      } else if (msg.startsWith('test') || msg.includes('test')) {
-        tests.push(`- ${c.message} (${c.repoName})`)
-      } else if (msg.startsWith('chore') || msg.includes('update') || msg.includes('upgrade') || msg.includes('bump')) {
-        chores.push(`- ${c.message} (${c.repoName})`)
-      } else {
-        others.push(`- ${c.message} (${c.repoName})`)
+      if (recentCommits.length === 0) {
+        setResult(`## 📦 Release Notes\n\n### 📅 No commits found\n\nYou haven't made any commits yet. Start coding to generate release notes!`)
+        setLoading(false)
+        return
       }
-    })
 
-    // ============================================================
-    // 3. 生成版本号（基于提交数量）
-    // ============================================================
-    const version = `v1.${Math.floor(totalCommits / 10)}.${totalCommits % 10}`
-    const releaseDate = new Date().toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    })
+      const features = recentCommits.filter((c: any) => 
+        c.message.toLowerCase().includes('feat') || c.message.toLowerCase().includes('add')
+      )
+      const fixes = recentCommits.filter((c: any) => 
+        c.message.toLowerCase().includes('fix') || c.message.toLowerCase().includes('bug')
+      )
 
-    // ============================================================
-    // 4. 生成发布说明摘要
-    // ============================================================
-    const totalChanges = features.length + fixes.length + docs.length + tests.length + chores.length + others.length
-    const summary = totalChanges > 0 
-      ? `This release includes ${totalChanges} changes across ${recentCommits.length} commits, with contributions from @${user?.login || 'contributors'}.`
-      : 'No significant changes recorded in this release period.'
-
-    // ============================================================
-    // 5. 生成贡献者列表
-    // ============================================================
-    const contributors = [`@${user?.login || 'developer'}`]
-
-    // ============================================================
-    // 6. 构建最终的 Release Notes
-    // ============================================================
-    const response = `## 📦 Release Notes
-
-### 🏷️ Version ${version}
-**Release Date**: ${releaseDate}
-
----
-
-### 📋 Release Summary
-
-${summary}
-
-| Metric | Value |
-|--------|-------|
-| **Total Commits** | ${recentCommits.length} |
-| **Features Added** | ${features.length} |
-| **Bug Fixes** | ${fixes.length} |
-| **Documentation** | ${docs.length} |
-| **Tests** | ${tests.length} |
-| **Maintenance** | ${chores.length} |
-| **Repositories Affected** | ${new Set(recentCommits.map((c: any) => c.repoName)).size} |
-| **Contributors** | ${contributors.length} |
-
----
-
-### 🆕 New Features
-
-${features.length > 0 
-  ? features.join('\n')
-  : '- No new features in this release'}
-
----
-
-### 🐛 Bug Fixes
-
-${fixes.length > 0 
-  ? fixes.join('\n')
-  : '- No bug fixes in this release'}
-
----
-
-### 📚 Documentation
-
-${docs.length > 0 
-  ? docs.join('\n')
-  : '- No documentation updates in this release'}
-
----
-
-### 🧪 Testing
-
-${tests.length > 0 
-  ? tests.join('\n')
-  : '- No test updates in this release'}
-
----
-
-### 🔧 Maintenance & Chores
-
-${chores.length > 0 
-  ? chores.join('\n')
-  : '- No maintenance updates in this release'}
-
----
-
-### 📊 Contributors
-
-${contributors.map((c: string) => `- **${c}**`).join('\n')}
-
----
-
-### 📝 Recent Commits
-
-${recentCommits.slice(0, 10).map((c: any) => 
-  `- \`${c.sha}\` ${c.message} — ${c.repoName}`
-).join('\n')}
-
-${recentCommits.length > 10 ? `\n*... and ${recentCommits.length - 10} more commits*` : ''}
-
----
-
-### 📈 Next Steps
-
-- [ ] Review and test all changes
-- [ ] Update documentation if needed
-- [ ] Plan for next release
-
----
-
-### 📄 License
-
-This release is distributed under the MIT License.
-
----
-
-<div align="center">
-
-*Generated by GitInsight AI — Professional Engineering Intelligence Platform*
-
-</div>`
-
-    setResult(response)
-  } catch (error) {
-    console.error("❌ Release notes error:", error)
-    setResult("Error generating release notes. Please try again.")
-  } finally {
-    setLoading(false)
+      const response = `## 📦 Release Notes\n\n### 🏷️ Version v1.0.0\n**Release Date**: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}\n\n### 📋 Release Summary\nTotal commits: ${recentCommits.length}\n\n### 🆕 New Features\n${features.length > 0 ? features.map((c: any) => `- ${c.message}`).join('\n') : '- No new features'}\n\n### 🐛 Bug Fixes\n${fixes.length > 0 ? fixes.map((c: any) => `- ${c.message}`).join('\n') : '- No bug fixes'}\n\n### 📊 Contributors\n- @${user?.login || 'contributor'}`
+      setResult(response)
+    } catch (error) {
+      setResult("Error generating release notes. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }
-}
 
-  // ============================================================
-  // 选择仓库 - 添加日志
-  // ============================================================
   const handleRepoSelect = (repo: any) => {
-    console.log("🔄 切换仓库:", repo.name)
     setSelectedRepo(repo)
   }
 
   // ============================================================
   // 加载状态
   // ============================================================
+  
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
-          <p className="mt-2 text-muted-foreground">Loading your data...</p>
+          <div className="relative">
+            <div className="w-12 h-12 rounded-full border-4 border-primary/20 animate-spin border-t-primary" />
+          </div>
+          <p className="mt-4 text-sm text-muted-foreground">Loading your data...</p>
         </div>
       </div>
     )
@@ -380,6 +196,9 @@ This release is distributed under the MIT License.
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
+          <div className="w-16 h-16 rounded-full bg-muted/30 flex items-center justify-center mx-auto mb-4">
+            <GitBranch className="w-8 h-8 text-muted-foreground/40" />
+          </div>
           <p className="text-muted-foreground">No data available. Please connect your GitHub account.</p>
         </div>
       </div>
@@ -395,72 +214,88 @@ This release is distributed under the MIT License.
   return (
     <div className="space-y-6">
       {/* ===== 头部 ===== */}
-      <div>
-        <h1 className="text-3xl font-bold">AI Insights</h1>
-        <p className="text-muted-foreground">
-          Get AI-powered analysis and recommendations for your GitHub activity
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">AI Insights</h1>
+          <p className="text-muted-foreground mt-1">
+            Get AI-powered analysis and recommendations for your GitHub activity
+          </p>
+        </div>
+        <Badge variant="outline" className="gap-1.5 px-3 py-1.5 text-xs">
+          <Sparkles className="w-3 h-3 text-yellow-500" />
+          AI Powered
+        </Badge>
       </div>
 
-      {/* ===== 开发者概览卡片 ===== */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="p-2 rounded-lg bg-blue-500/10">
+      {/* ===== 统计卡片 - 美化版 ===== */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="border-0 bg-gradient-to-br from-blue-50/50 to-blue-100/30 dark:from-blue-950/20 dark:to-blue-900/10 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-blue-500/10">
               <Code2 className="w-5 h-5 text-blue-500" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Repositories</p>
-              <p className="text-xl font-bold">{totalRepos || 0}</p>
+              <p className="text-xs text-muted-foreground">Repositories</p>
+              <p className="text-xl font-bold tracking-tight">{totalRepos || 0}</p>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="p-2 rounded-lg bg-yellow-500/10">
-              <Star className="w-5 h-5 text-yellow-500" />
+
+        <Card className="border-0 bg-gradient-to-br from-amber-50/50 to-amber-100/30 dark:from-amber-950/20 dark:to-amber-900/10 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/10">
+              <Star className="w-5 h-5 text-amber-500" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total Stars</p>
-              <p className="text-xl font-bold">{totalStars || 0}</p>
+              <p className="text-xs text-muted-foreground">Total Stars</p>
+              <p className="text-xl font-bold tracking-tight">{totalStars || 0}</p>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="p-2 rounded-lg bg-green-500/10">
-              <Award className="w-5 h-5 text-green-500" />
+
+        <Card className="border-0 bg-gradient-to-br from-emerald-50/50 to-emerald-100/30 dark:from-emerald-950/20 dark:to-emerald-900/10 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10">
+              <Award className="w-5 h-5 text-emerald-500" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Productivity</p>
-              <p className="text-xl font-bold">{metrics?.productivityScore || 0}</p>
+              <p className="text-xs text-muted-foreground">Productivity</p>
+              <p className="text-xl font-bold tracking-tight">{metrics?.productivityScore || 0}</p>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="p-2 rounded-lg bg-purple-500/10">
+
+        <Card className="border-0 bg-gradient-to-br from-purple-50/50 to-purple-100/30 dark:from-purple-950/20 dark:to-purple-900/10 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-purple-500/10">
               <Target className="w-5 h-5 text-purple-500" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Consistency</p>
-              <p className="text-xl font-bold">{metrics?.consistencyScore || 0}</p>
+              <p className="text-xs text-muted-foreground">Consistency</p>
+              <p className="text-xl font-bold tracking-tight">{metrics?.consistencyScore || 0}</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* ===== 技术栈概览 ===== */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">Technology Stack</CardTitle>
+      <Card className="border shadow-sm hover:shadow-md transition-shadow duration-300">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Zap className="w-4 h-4 text-yellow-500" />
+            Technology Stack
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
             {languages.length > 0 ? (
               languages.map((lang: any, i: number) => (
-                <Badge key={i} variant="secondary" className="px-3 py-1">
-                  {lang.name} ({lang.percentage}%)
+                <Badge 
+                  key={i} 
+                  variant="secondary" 
+                  className="px-3 py-1.5 text-xs font-medium rounded-full bg-muted/50 hover:bg-muted transition-colors"
+                >
+                  {lang.name} <span className="ml-1 text-muted-foreground/60">({lang.percentage}%)</span>
                 </Badge>
               ))
             ) : (
@@ -468,106 +303,138 @@ This release is distributed under the MIT License.
             )}
           </div>
           {topLanguages && (
-            <p className="mt-3 text-sm text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground/70">
               Primary stack: <span className="font-medium text-foreground">{topLanguages}</span>
             </p>
           )}
         </CardContent>
       </Card>
 
-      {/* ===== 功能按钮 ===== */}
-<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-  {/* Analyze Profile */}
-  <Button
-    variant={activeFeature === "analyze" ? "default" : "outline"}
-    className="h-auto py-4 flex flex-col items-center justify-center gap-2"
-    onClick={generateInsights}
-    disabled={loading}
-  >
-    <TrendingUp className="w-5 h-5" />
-    <span className="text-sm font-medium">Analyze Profile</span>
-    <span className="text-xs text-muted-foreground font-normal">Get AI insights</span>
-  </Button>
+      {/* ===== 功能按钮 - 美化版 ===== */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Button
+          variant={activeFeature === "analyze" ? "default" : "outline"}
+          className={cn(
+            "h-auto py-4 flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-300",
+            activeFeature === "analyze" 
+              ? "shadow-md shadow-primary/20" 
+              : "hover:shadow-md hover:shadow-primary/10 hover:border-primary/30 hover:bg-muted/50"
+          )}
+          onClick={generateInsights}
+          disabled={loading}
+        >
+          <TrendingUp className={cn(
+            "w-5 h-5 transition-transform duration-300",
+            activeFeature === "analyze" ? "text-primary-foreground" : "text-primary",
+            "group-hover:scale-110"
+          )} />
+          <span className="text-sm font-medium">Analyze Profile</span>
+          <span className="text-xs text-muted-foreground/70 font-normal">Get AI insights</span>
+        </Button>
 
-  {/* Resume Summary */}
-  <Button
-    variant={activeFeature === "resume" ? "default" : "outline"}
-    className="h-auto py-4 flex flex-col items-center justify-center gap-2"
-    onClick={generateResume}
-    disabled={loading}
-  >
-    <User className="w-5 h-5" />
-    <span className="text-sm font-medium">Resume Summary</span>
-    <span className="text-xs text-muted-foreground font-normal">Professional summary</span>
-  </Button>
+        <Button
+          variant={activeFeature === "resume" ? "default" : "outline"}
+          className={cn(
+            "h-auto py-4 flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-300",
+            activeFeature === "resume" 
+              ? "shadow-md shadow-primary/20" 
+              : "hover:shadow-md hover:shadow-primary/10 hover:border-primary/30 hover:bg-muted/50"
+          )}
+          onClick={generateResume}
+          disabled={loading}
+        >
+          <User className={cn(
+            "w-5 h-5 transition-transform duration-300",
+            activeFeature === "resume" ? "text-primary-foreground" : "text-primary",
+            "group-hover:scale-110"
+          )} />
+          <span className="text-sm font-medium">Resume Summary</span>
+          <span className="text-xs text-muted-foreground/70 font-normal">Professional summary</span>
+        </Button>
 
-  {/* Generate README */}
-  <div className="flex gap-2">
-    <Button
-      variant={activeFeature === "readme" ? "default" : "outline"}
-      className="h-auto py-4 flex-1 flex flex-col items-center justify-center gap-2 rounded-r-none"
-      onClick={generateReadme}
-      disabled={loading || repos.length === 0}
-    >
-      <FileText className="w-5 h-5" />
-      <span className="text-sm font-medium">Generate README</span>
-      <span className="text-xs text-muted-foreground font-normal truncate max-w-[100px]">
-        {displayRepo ? displayRepo.name : 'Select repo'}
-      </span>
-    </Button>
-    
-    {repos.length > 0 && (
-      <select
-        value={selectedRepo?.id || repos[0]?.id || ''}
-        onChange={(e) => {
-          const repo = repos.find((r: any) => r.id === Number(e.target.value))
-          if (repo) handleRepoSelect(repo)
-        }}
-        className="h-auto py-4 px-3 border rounded-r-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary min-w-[100px]"
-        disabled={loading}
-      >
-        {repos.slice(0, 20).map((repo: any) => (
-          <option key={repo.id} value={repo.id}>
-            {repo.name}
-          </option>
-        ))}
-      </select>
-    )}
-  </div>
+        <div className="flex gap-1">
+          <Button
+            variant={activeFeature === "readme" ? "default" : "outline"}
+            className={cn(
+              "h-auto py-4 flex-1 flex flex-col items-center justify-center gap-1 rounded-l-xl transition-all duration-300",
+              activeFeature === "readme" 
+                ? "shadow-md shadow-primary/20" 
+                : "hover:shadow-md hover:shadow-primary/10 hover:border-primary/30 hover:bg-muted/50"
+            )}
+            onClick={generateReadme}
+            disabled={loading || repos.length === 0}
+          >
+            <FileText className={cn(
+              "w-5 h-5 transition-transform duration-300",
+              activeFeature === "readme" ? "text-primary-foreground" : "text-primary",
+              "group-hover:scale-110"
+            )} />
+            <span className="text-sm font-medium">Generate README</span>
+            <span className="text-xs text-muted-foreground/70 font-normal truncate max-w-[80px]">
+              {displayRepo ? displayRepo.name : 'Select repo'}
+            </span>
+          </Button>
+          
+          {repos.length > 0 && (
+            <select
+              value={selectedRepo?.id || repos[0]?.id || ''}
+              onChange={(e) => {
+                const repo = repos.find((r: any) => r.id === Number(e.target.value))
+                if (repo) handleRepoSelect(repo)
+              }}
+              className="h-auto py-4 px-2 border-y border-r rounded-r-xl bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 min-w-[80px] cursor-pointer hover:bg-muted/30 transition-colors"
+              disabled={loading}
+            >
+              {repos.slice(0, 20).map((repo: any) => (
+                <option key={repo.id} value={repo.id}>
+                  {repo.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
 
-  {/* Release Notes */}
-  <Button
-    variant={activeFeature === "release" ? "default" : "outline"}
-    className="h-auto py-4 flex flex-col items-center justify-center gap-2"
-    onClick={generateReleaseNotes}
-    disabled={loading}
-  >
-    <BookOpen className="w-5 h-5" />
-    <span className="text-sm font-medium">Release Notes</span>
-    <span className="text-xs text-muted-foreground font-normal">From recent commits</span>
-  </Button>
-</div>
+        <Button
+          variant={activeFeature === "release" ? "default" : "outline"}
+          className={cn(
+            "h-auto py-4 flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-300",
+            activeFeature === "release" 
+              ? "shadow-md shadow-primary/20" 
+              : "hover:shadow-md hover:shadow-primary/10 hover:border-primary/30 hover:bg-muted/50"
+          )}
+          onClick={generateReleaseNotes}
+          disabled={loading}
+        >
+          <BookOpen className={cn(
+            "w-5 h-5 transition-transform duration-300",
+            activeFeature === "release" ? "text-primary-foreground" : "text-primary",
+            "group-hover:scale-110"
+          )} />
+          <span className="text-sm font-medium">Release Notes</span>
+          <span className="text-xs text-muted-foreground/70 font-normal">From recent commits</span>
+        </Button>
+      </div>
+
       {/* ===== 加载状态 ===== */}
       {loading && (
-        <Card>
-          <CardContent className="p-8">
-            <div className="flex items-center justify-center gap-3">
-              <Loader2 className="w-5 h-5 animate-spin text-primary" />
-              <span className="text-muted-foreground">Generating AI response...</span>
-            </div>
+        <Card className="border shadow-sm">
+          <CardContent className="p-8 flex items-center justify-center gap-3">
+            <div className="w-5 h-5 rounded-full border-2 border-primary/20 animate-spin border-t-primary" />
+            <span className="text-sm text-muted-foreground">Generating AI response...</span>
           </CardContent>
         </Card>
       )}
 
-      {/* ===== 结果展示 ===== */}
+      {/* ===== 结果展示 - 美化版 ===== */}
       {result && !loading && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
+        <Card className="border shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary/20 via-primary to-primary/20" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium">
               <Sparkles className="w-4 h-4 text-yellow-500" />
               AI Response
             </CardTitle>
-            <Badge variant="outline">AI Generated</Badge>
+            <Badge variant="outline" className="text-[10px] px-2 py-0.5">AI Generated</Badge>
           </CardHeader>
           <CardContent>
             <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-li:my-0.5 prose-code:text-sm prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
@@ -578,9 +445,7 @@ This release is distributed under the MIT License.
                   code({ className, children, ...props }) {
                     const match = /language-(\w+)/.exec(className || '')
                     return match ? (
-                      <code className={className} {...props}>
-                        {children}
-                      </code>
+                      <code className={className} {...props}>{children}</code>
                     ) : (
                       <code className="bg-muted/50 px-1.5 py-0.5 rounded text-sm" {...props}>
                         {children}
@@ -622,11 +487,13 @@ This release is distributed under the MIT License.
 
       {/* ===== 空状态引导 ===== */}
       {!result && !loading && (
-        <Card className="border-dashed">
+        <Card className="border-dashed border-2 shadow-sm">
           <CardContent className="p-12 text-center">
-            <Sparkles className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+            <div className="w-16 h-16 rounded-full bg-primary/5 flex items-center justify-center mx-auto mb-4">
+              <Sparkles className="w-8 h-8 text-primary/30" />
+            </div>
             <h3 className="text-lg font-medium">Ready for AI Analysis</h3>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+            <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1">
               Click any button above to generate AI-powered insights based on your GitHub activity.
             </p>
           </CardContent>
