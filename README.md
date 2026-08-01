@@ -1,7 +1,7 @@
+
 <div align="center">
 
 # GitInsight AI
-
 
 **An AI-Powered Developer Intelligence Platform**
 
@@ -19,29 +19,28 @@
 
 ## 📖 Table of Contents
 
-- [Overview](#-overview)
-- [Features](#-features)
-- [Tech Stack](#-tech-stack)
-- [Quick Start](#-quick-start)
-- [Architecture](#-architecture)
-- [Screenshots](#-screenshots)
-- [Environment Variables](#-environment-variables)
-- [Deployment](#-deployment)
-- [Contributing](#-contributing)
-- [License](#-license)
+- [Overview](#overview)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [Environment Variables](#environment-variables)
+- [Deployment](#deployment)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
-## 🎯 Overview
+## Overview
 
 **GitInsight AI** is a production-grade developer intelligence platform that transforms GitHub activity data into actionable engineering insights. Unlike traditional dashboards that merely display repository statistics, GitInsight AI combines:
 
-- **Real-time GitHub Analytics** - Comprehensive visibility into your development activity
-- **Engineering Intelligence** - Advanced metrics that measure productivity and consistency
-- **AI-Powered Insights** - Personalized recommendations for technical growth
-- **Professional Portfolio Tools** - Generate resumes, READMEs, and release notes
+- **Real-time GitHub Analytics** — Comprehensive visibility into your development activity
+- **Engineering Intelligence** — Advanced metrics that measure productivity and consistency
+- **AI-Powered Insights** — Personalized recommendations for technical growth
+- **Professional Portfolio Tools** — Generate resumes, READMEs, and release notes
 
-The platform is designed to help developers understand their coding patterns, identify improvement opportunities, and showcase their technical capabilities to employers and collaborators.
+The platform helps developers understand their coding patterns, identify improvement opportunities, and showcase their technical capabilities to employers and collaborators.
 
 ### Why GitInsight AI?
 
@@ -54,40 +53,39 @@ The platform is designed to help developers understand their coding patterns, id
 
 ---
 
-## ✨ Features
+## Features
 
 ### 🔐 Authentication
-- **GitHub OAuth 2.0** - Secure, seamless login with your GitHub account
-- **Session Management** - Persistent authentication with NextAuth.js
+- **GitHub OAuth 2.0** — Secure, seamless login with your GitHub account
+- **Session Management** — Persistent authentication with NextAuth.js
 
 ### 📊 Analytics Dashboard
-- **Real-time Statistics** - Track repositories, stars, followers, and PRs
-- **Activity Charts** - Visualize commit patterns and contribution trends
-- **Language Distribution** - Understand your technology stack composition
-- **Repository Growth** - Monitor your project portfolio expansion
+- **Real-time Statistics** — Track repositories, stars, followers, and PRs
+- **Activity Charts** — Visualize commit patterns and contribution trends
+- **Language Distribution** — Understand your technology stack composition
+- **Repository Growth** — Monitor your project portfolio expansion
 
 ### 🤖 AI-Powered Insights
-- **Profile Analysis** - Get comprehensive engineering intelligence
-- **Resume Generator** - Create professional developer summaries
-- **README Generator** - Automatically generate project documentation
-- **Release Notes** - Generate release notes from commit history
-- **Markdown Rendering** - Beautiful, formatted AI responses
+- **Profile Analysis** — Get comprehensive engineering intelligence with warm, encouraging feedback
+- **Resume Generator** — Create professional developer summaries
+- **README Generator** — Automatically generate project documentation based on real repository data
+- **Release Notes** — Generate release notes from commit history with automatic categorization
 
 ### 🎨 Developer Experience
-- **Dark/Light Mode** - Seamless theme switching
-- **Responsive Design** - Works on desktop, tablet, and mobile
-- **Skeleton Loading** - Smooth loading states for better UX
-- **TypeScript** - Full type safety across the entire codebase
+- **Dark/Light Mode** — Seamless theme switching
+- **Responsive Design** — Works on desktop, tablet, and mobile
+- **Skeleton Loading** — Smooth loading states for better UX
+- **TypeScript** — Full type safety across the entire codebase
 
 ### 📈 Engineering Metrics
-- **Productivity Score** - Measure your coding efficiency
-- **Consistency Score** - Track your development regularity
-- **Repository Health** - Get maintenance recommendations
-- **Activity Trends** - Understand your growth trajectory
+- **Productivity Score** — Measure your coding efficiency
+- **Consistency Score** — Track your development regularity
+- **Repository Health** — Get maintenance recommendations
+- **Activity Trends** — Understand your growth trajectory
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Category | Technology | Purpose |
 |----------|------------|---------|
@@ -104,7 +102,7 @@ The platform is designed to help developers understand their coding patterns, id
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -144,7 +142,7 @@ npm run start
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ### System Architecture
 
@@ -173,11 +171,11 @@ npm run start
 
 ### Data Flow
 
-1. **Authentication** - User signs in via GitHub OAuth
-2. **Data Collection** - GitHub API fetches user, repo, and event data
-3. **Processing** - Analytics engine calculates engineering metrics
-4. **Visualization** - Recharts renders interactive dashboards
-5. **AI Generation** - Context builder creates prompts from real data
+1. **Authentication** — User signs in via GitHub OAuth
+2. **Data Collection** — GitHub API fetches user, repo, and event data
+3. **Processing** — Analytics engine calculates engineering metrics
+4. **Visualization** — Recharts renders interactive dashboards
+5. **AI Generation** — Context builder creates prompts from real data
 
 ### Project Structure
 
@@ -205,7 +203,8 @@ gitinsight/
 ├── services/                   # Service layer
 │   ├── ai.service.ts           # AI services
 │   ├── analytics.service.ts    # Analytics engine
-│   └── ai-context-builder.ts   # AI context builder
+│   ├── ai-context-builder.ts   # AI context builder
+│   └── readme-generator.service.ts # README generator
 ├── types/                      # TypeScript definitions
 ├── .env.local                  # Environment variables
 └── package.json                # Dependencies
@@ -213,23 +212,7 @@ gitinsight/
 
 ---
 
-## 📸 Screenshots
-
-### Landing Page
-> *Professional SaaS-style landing page with GitHub authentication*
-
-### Dashboard Overview
-> *Real-time GitHub analytics with statistics and charts*
-
-### Analytics Page
-> *Detailed engineering metrics and data visualization*
-
-### AI Insights
-> *AI-powered recommendations and document generation*
-
----
-
-## 🔐 Environment Variables
+## Environment Variables
 
 Create a `.env.local` file in the root directory:
 
@@ -241,10 +224,6 @@ GITHUB_SECRET=your_github_client_secret
 # NextAuth
 NEXTAUTH_SECRET=your_nextauth_secret
 NEXTAUTH_URL=http://localhost:3000
-
-# Optional: AI API Keys (for enhanced AI capabilities)
-# OPENAI_API_KEY=your_openai_key
-# DEEPSEEK_API_KEY=your_deepseek_key
 ```
 
 ### Setting up GitHub OAuth
@@ -268,7 +247,7 @@ openssl rand -base64 32
 
 ---
 
-## 🚀 Deployment
+## Deployment
 
 ### Deploy to Vercel (Recommended)
 
@@ -280,44 +259,9 @@ openssl rand -base64 32
 4. Add environment variables
 5. Deploy
 
-### Deploy to Other Platforms
-
-<details>
-<summary><b>AWS Amplify</b></summary>
-
-```bash
-# Install AWS Amplify CLI
-npm install -g @aws-amplify/cli
-
-# Initialize
-amplify init
-
-# Add hosting
-amplify add hosting
-
-# Publish
-amplify publish
-```
-</details>
-
-<details>
-<summary><b>Docker</b></summary>
-
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
-EXPOSE 3000
-CMD ["npm", "start"]
-```
-</details>
-
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Here's how you can help:
 
@@ -350,25 +294,25 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ---
 
-## 📄 License
+## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- [Next.js](https://nextjs.org/) - The React framework
-- [shadcn/ui](https://ui.shadcn.com/) - Beautiful UI components
-- [Recharts](https://recharts.org/) - Data visualization
-- [Vercel](https://vercel.com/) - Deployment platform
-- [GitHub](https://github.com/) - Data source and authentication
+This project is licensed under the MIT License.
 
 ---
 
-## 📧 Contact
+## Acknowledgments
 
-**RIVICV** - [GitHub](https://github.com/RIVICV)
+- [Next.js](https://nextjs.org/) — The React framework
+- [shadcn/ui](https://ui.shadcn.com/) — Beautiful UI components
+- [Recharts](https://recharts.org/) — Data visualization
+- [Vercel](https://vercel.com/) — Deployment platform
+- [GitHub](https://github.com/) — Data source and authentication
+
+---
+
+## Contact
+
+**RIVICV** — [GitHub](https://github.com/RIVICV)
 
 Project Link: [https://github.com/RIVICV/New-Gitinsight](https://github.com/RIVICV/New-Gitinsight)
 
@@ -381,4 +325,4 @@ Project Link: [https://github.com/RIVICV/New-Gitinsight](https://github.com/RIVI
 Made with ❤️ by RIVICV
 
 </div>
----
+
