@@ -48,47 +48,63 @@ export function Sidebar() {
   const { data: session } = useSession()
 
   return (
-    <aside className="hidden md:flex md:w-64 flex-col border-r bg-background">
-      <div className="flex items-center gap-2 px-6 py-4 border-b">
-        <GithubIcon className="w-6 h-6 text-primary" />
-        <span className="text-lg font-bold">GitInsight</span>
+    <aside className="hidden md:flex md:w-64 flex-col border-r bg-background/80 backdrop-blur-sm supports-[backdrop-filter]:bg-background/60">
+      {/* Logo 区域 */}
+      <div className="flex items-center gap-2.5 px-6 py-5 border-b">
+        <div className="p-1.5 rounded-lg bg-primary/10">
+          <GithubIcon className="w-5 h-5 text-primary" />
+        </div>
+        <span className="text-lg font-bold tracking-tight">GitInsight</span>
+        <span className="ml-auto text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider">
+          AI
+        </span>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+      {/* 导航菜单 */}
+      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {menuItems.map((item) => {
           const isActive = pathname === item.href
-          const Icon = item.icon
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200",
                 isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground hover:translate-x-0.5"
               )}
             >
-              <Icon className="w-4 h-4" />
-              {item.label}
+              <item.icon className={cn(
+                "w-4 h-4 transition-transform duration-200",
+                isActive ? "text-primary-foreground" : "group-hover:scale-110"
+              )} />
+              <span className="font-medium">{item.label}</span>
+              {isActive && (
+                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-foreground/60" />
+              )}
             </Link>
           )
         })}
       </nav>
 
-      <div className="p-4 border-t">
+      {/* 用户信息 */}
+      <div className="p-4 border-t bg-muted/30">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="w-full justify-start gap-3 px-2">
-              <Avatar className="w-8 h-8">
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start gap-3 px-2 hover:bg-muted/50 transition-colors"
+            >
+              <Avatar className="w-8 h-8 ring-2 ring-primary/10">
                 <AvatarImage src={session?.user?.image || ""} />
-                <AvatarFallback>
+                <AvatarFallback className="bg-primary/10 text-primary text-xs">
                   {session?.user?.name?.charAt(0) || "U"}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex flex-col items-start text-sm">
-                <span className="font-medium">{session?.user?.name}</span>
-                <span className="text-xs text-muted-foreground">
+              <div className="flex flex-col items-start text-sm min-w-0">
+                <span className="font-medium truncate max-w-[100px]">{session?.user?.name}</span>
+                <span className="text-xs text-muted-foreground truncate max-w-[100px]">
                   {session?.user?.email}
                 </span>
               </div>
@@ -97,8 +113,8 @@ export function Sidebar() {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => signOut()}>
-              <LogOut className="w-4 h-4 mr-2" />
+            <DropdownMenuItem onClick={() => signOut()} className="gap-2 text-red-500 focus:text-red-500">
+              <LogOut className="w-4 h-4" />
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
