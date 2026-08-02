@@ -1,585 +1,299 @@
 // services/ai.service.ts
-import type { DeveloperContext } from './ai-context-builder'
+// 使用 Agnes 2.5 Flash API（完全免费，国内直连）
+
+import { DeveloperContext } from './ai-context-builder'
+
+// ============================================================
+// 配置
+// ============================================================
+
+const AGNES_API_KEY = process.env.AGNES_API_KEY
+const AGNES_BASE_URL = 'https://apihub.agnes-ai.cn/v1'
+
+// ============================================================
+// Agnes API 调用
+// ============================================================
+
+async function callAgnes(prompt: string, systemPrompt?: string): Promise<string> {
+  // 检查 API Key 是否配置
+  if (!AGNES_API_KEY) {
+    throw new Error(
+      '请先配置 Agnes API Key：\n' +
+      '1. 访问 https://agnes-ai.cn/ 注册账号\n' +
+      '2. 进入平台获取 API Key\n' +
+      '3. 在 .env.local 中添加 AGNES_API_KEY=你的密钥'
+    )
+  }
+
+  console.log('🔑 Calling Agnes API with prompt length:', prompt.length)
+
+  const response = await fetch(`${AGNES_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${AGNES_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'agnes-2.5-flash',  // 或 agnes-2.0-flash（备选）
+      messages: [
+        ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 2000,
+      stream: false,
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error('❌ Agnes API Error:', response.status, errorText)
+    
+    // 如果是 404，尝试使用稳定版模型
+    if (response.status === 404) {
+      console.log('🔄 尝试使用稳定版模型 agnes-2.0-flash...')
+      const fallbackResponse = await fetch(`${AGNES_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${AGNES_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'agnes-2.0-flash',  // 稳定版
+          messages: [
+            ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.7,
+          max_tokens: 2000,
+          stream: false,
+        }),
+      })
+      
+      if (!fallbackResponse.ok) {
+        const fallbackError = await fallbackResponse.text()
+        throw new Error(`Agnes API 调用失败 (${fallbackResponse.status}): ${fallbackError}`)
+      }
+      
+      const data = await fallbackResponse.json()
+      return data.choices[0].message.content
+    }
+    
+    throw new Error(`Agnes API 调用失败 (${response.status}): ${errorText}`)
+  }
+
+  const data = await response.json()
+  console.log('✅ Agnes API 调用成功')
+  return data.choices[0].message.content
+}
+
+// ============================================================
+// 降级方案：当 API 不可用时使用模板
+// ============================================================
+
+function generateFallbackResponse(context: DeveloperContext): string {
+  const primaryLang = context.technology.primaryLanguages[0] || '多种语言'
+  const score = context.engineering.productivityScore
+  const consistency = context.engineering.consistencyScore
+  const trend = context.engineering.activityTrend
+
+  return `## 📊 开发者分析报告
+
+### 👤 开发者概览
+**${context.profile.name}** 是一名 ${primaryLang} 开发者，拥有 ${context.profile.repos} 个仓库，${context.profile.followers} 位粉丝。
+
+### 📈 工程指标
+- **生产力得分**: ${score}/100 ${score >= 70 ? '🔥 表现优秀' : score >= 50 ? '📈 稳步提升' : '🌱 有待加强'}
+- **一致性得分**: ${consistency}/100 ${consistency >= 70 ? '⭐ 一致性很好' : consistency >= 50 ? '🔄 保持稳定' : '📅 需要更规律'}
+- **活动趋势**: ${trend === 'increasing' ? '📈 上升趋势' : trend === 'stable' ? '➡️ 保持稳定' : '📉 需要关注'}
+
+### 🛠️ 技术栈
+**主要语言**: ${context.technology.primaryLanguages.join(', ')}
+**框架**: ${context.technology.frameworks.join(', ') || '正在积累'}
+**经验信号**: ${context.technology.experienceSignals.join(', ') || '持续学习中'}
+
+### 💡 改进建议
+${context.improvementAreas.length > 0 
+  ? context.improvementAreas.map((area, i) => `${i + 1}. ${area}`).join('\n')
+  : '1. 继续保持良好的开发习惯\n2. 尝试学习新的技术栈\n3. 参与开源项目积累经验'}
+
+### 🎯 下一步建议
+基于你的技术栈，建议继续深化 ${context.technology.primaryLanguages.join(', ')} 相关的项目经验，同时关注 ${context.technology.primaryLanguages.length > 1 ? '全栈' : '相关'}技术生态的发展。
+
+---
+⚠️ *此响应由模板生成，配置 API Key 后可获得真正的 AI 分析*`
+}
+
+// ============================================================
+// 智能调用：优先使用 API，失败时降级到模板
+// ============================================================
+
+async function callAI(prompt: string, systemPrompt?: string, context?: DeveloperContext): Promise<string> {
+  try {
+    // 先尝试调用 Agnes API
+    return await callAgnes(prompt, systemPrompt)
+  } catch (error: any) {
+    console.warn('⚠️ Agnes API 调用失败，使用降级方案:', error.message)
+    
+    // 如果有 context，使用模板响应
+    if (context) {
+      return generateFallbackResponse(context)
+    }
+    
+    // 如果没有 context，返回简单的错误提示
+    return `## ⚠️ AI 服务暂时不可用
+
+### 可能的原因：
+1. Agnes API Key 未配置或已过期
+2. 网络连接问题
+3. API 服务暂时不稳定
+
+### 解决方法：
+1. 检查 \`.env.local\` 中的 \`AGNES_API_KEY\`
+2. 访问 https://agnes-ai.cn/ 确认 API Key 有效
+3. 稍后重试
+
+### 如何获取 API Key：
+1. 访问 https://agnes-ai.cn/ 注册账号
+2. 进入平台 -> API Keys
+3. 创建新 Key
+4. 复制到 \`.env.local\`
+
+### 当前使用模板响应，配置后即可获得真正的 AI 分析 🚀`
+  }
+}
+
+// ============================================================
+// 业务方法
+// ============================================================
 
 export class AIService {
+  // 生成 AI 洞察
   static async generateInsight(context: DeveloperContext): Promise<string> {
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    const systemPrompt = `你是一位资深软件工程导师，专门分析开发者的 GitHub 活动并提供专业建议。
+你的分析要基于数据，具体、可操作，不要泛泛而谈。
+输出格式使用 Markdown，包括标题、列表、加粗等。
+保持专业、鼓励、有建设性的语气。`
 
-    const { profile, technology, engineering, improvementAreas } = context
-    const { productivityScore, consistencyScore, activityTrend } = engineering
+    const prompt = `
+请分析以下开发者的 GitHub 数据并生成一份专业报告。
+
+## 开发者信息
+- 用户名: ${context.profile.username}
+- 姓名: ${context.profile.name}
+- 简介: ${context.profile.bio || '软件开发者'}
+- 粉丝数: ${context.profile.followers}
+- 仓库数: ${context.profile.repos}
+
+## 技术栈
+- 主要语言: ${context.technology.primaryLanguages.join(', ') || '未检测到'}
+- 框架: ${context.technology.frameworks.join(', ') || '未指定'}
+- 经验信号: ${context.technology.experienceSignals.join(', ') || '发展中'}
+
+## 工程指标
+- 生产力得分: ${context.engineering.productivityScore}/100
+- 一致性得分: ${context.engineering.consistencyScore}/100
+- 活动趋势: ${context.engineering.activityTrend}
+- 主要仓库: ${context.engineering.topRepositories.join(', ') || '无'}
+
+## 改进建议
+${context.improvementAreas.length > 0 
+  ? context.improvementAreas.map((area, i) => `${i + 1}. ${area}`).join('\n')
+  : '目前没有检测到明显需要改进的领域'}
+
+请生成包含以下部分的分析报告：
+1. **工程师画像总结** - 一句话概括这个开发者
+2. **技术能力分析** - 技术栈优势和短板
+3. **工作习惯评估** - 开发节奏和规律性
+4. **具体改进建议** - 3-5条可操作的建议
+5. **职业发展建议** - 下一步学习方向
+
+报告要专业、具体、基于真实数据。`
     
-    const primaryLang = technology.primaryLanguages[0] || 'software development'
-    const secondaryLang = technology.primaryLanguages[1] || ''
-    const topProjects = engineering.topRepositories.slice(0, 3)
+    return callAI(prompt, systemPrompt, context)
+  }
 
-    // ============================================================
-    // 计算综合评级 - 用温暖的语言描述
-    // ============================================================
+  // 生成简历摘要
+  static async generateResumeSummary(context: DeveloperContext): Promise<string> {
+    const systemPrompt = `你是一位专业的简历顾问，擅长将技术经历转化为有说服力的简历描述。
+输出要简洁、专业、有冲击力，适合在技术面试中使用。
+使用 Markdown 格式，包含标题和列表。`
 
-    const overallScore = Math.round((productivityScore + consistencyScore) / 2)
-    let overallRating = ''
-    let ratingDescription = ''
-    let encouragement = ''
+    const prompt = `
+根据以下开发者信息生成一份专业的简历摘要：
+
+- 姓名: ${context.profile.name}
+- 简介: ${context.profile.bio || '软件开发者'}
+- 技术栈: ${context.technology.primaryLanguages.join(', ') || '多语言开发'}
+- 框架: ${context.technology.frameworks.join(', ') || '现代技术栈'}
+- 仓库数: ${context.profile.repos}
+- 主要项目: ${context.engineering.topRepositories.join(', ') || '多个活跃项目'}
+- 经验信号: ${context.technology.experienceSignals.join(', ') || '持续学习'}
+
+请生成：
+1. **专业摘要**：3-5句话，突出技术能力和工程经验
+2. **技术标签**：5-8个关键词标签（如 "React", "TypeScript", "Full Stack"）
+3. **项目亮点**：2-3个可量化的成果描述`
     
-    if (overallScore >= 85) {
-      overallRating = '🌟 Exceptional Engineer'
-      ratingDescription = 'You are demonstrating remarkable engineering maturity and consistency.'
-      encouragement = 'Your work ethic and technical depth are truly inspiring. Keep pushing boundaries — you\'re already at a level many aspire to reach.'
-    } else if (overallScore >= 70) {
-      overallRating = '💪 Strong Contributor'
-      ratingDescription = 'You have solid engineering fundamentals and a clear growth trajectory.'
-      encouragement = 'You\'re building something great here. Your consistency is paying off, and we believe you\'re just getting started. Keep going!'
-    } else if (overallScore >= 55) {
-      overallRating = '🌱 Growing Developer'
-      ratingDescription = 'You are developing good engineering habits and building core skills.'
-      encouragement = 'Every great engineer started exactly where you are. Your journey is unfolding beautifully — stay curious, stay consistent, and trust the process.'
-    } else if (overallScore >= 40) {
-      overallRating = '📚 Early Career Builder'
-      ratingDescription = 'You are laying the foundation for a strong engineering career.'
-      encouragement = 'This is the most exciting phase — everything is ahead of you. Keep learning, keep building, and don\'t be afraid to make mistakes. That\'s how we all grow.'
-    } else {
-      overallRating = '🌱 Beginning Your Journey'
-      ratingDescription = 'You are taking the first steps in your engineering path.'
-      encouragement = 'Welcome to the world of software engineering! Every expert was once a beginner. Your future self will thank you for the work you\'re putting in today.'
-    }
-
-    // ============================================================
-    // 技术栈评估 - 鼓励性语言
-    // ============================================================
-
-    let techDepthComment = ''
-    if (technology.primaryLanguages.length >= 3) {
-      techDepthComment = `You're working across ${technology.primaryLanguages.join(', ')} — that's impressive! Polyglot developers like you are rare and valuable. Your ability to adapt across different ecosystems is a superpower.`
-    } else if (technology.primaryLanguages.length >= 2) {
-      techDepthComment = `You're building skills in ${technology.primaryLanguages.join(' and ')}. This versatility will serve you well — you're learning to see problems from different angles, which is the mark of a thoughtful engineer.`
-    } else {
-      techDepthComment = `You're focusing deeply on ${primaryLang}, and that's a great foundation. Depth matters. As you grow, consider exploring adjacent technologies — they'll make you even more powerful in your primary stack.`
-    }
-
-    // ============================================================
-    // 一致性评估 - 鼓励性语言
-    // ============================================================
-
-    let maturityComment = ''
-    if (consistencyScore >= 80) {
-      maturityComment = 'Your consistency is outstanding. Regular, reliable contributions like yours are what make teams successful. You\'re building a reputation as someone who delivers — and that\'s a beautiful thing.'
-    } else if (consistencyScore >= 60) {
-      maturityComment = 'You have good consistency, and we see even more potential. Small improvements in your daily routine could unlock a new level of productivity. You\'re on the right track!'
-    } else {
-      maturityComment = 'Consistency is a muscle, and like any muscle, it grows with practice. Start small — even 15 minutes a day adds up. We believe in you, and we know you can build the rhythm that works best for you.'
-    }
-
-    // ============================================================
-    // 生产力评估 - 鼓励性语言
-    // ============================================================
-
-    let productivityComment = ''
-    if (productivityScore >= 80) {
-      productivityComment = 'Your productivity is impressive. You have a rare ability to turn ideas into working code efficiently. That\'s a gift — and you\'re using it well. Keep creating!'
-    } else if (productivityScore >= 60) {
-      productivityComment = 'Your productivity is solid, and you have the capacity to go even further. Every commit, every PR — they all add up. You\'re building momentum, and we\'re here to support you.'
-    } else {
-      productivityComment = 'Productivity is not about speed — it\'s about progress. You\'re moving forward, and that\'s what matters. Over time, your output will grow as your skills deepen. Be patient with yourself.'
-    }
-
-    // ============================================================
-    // 项目组合评估 - 鼓励性语言
-    // ============================================================
-
-    let portfolioComment = ''
-    if (topProjects.length > 0) {
-      portfolioComment = `Your portfolio includes ${topProjects.join(', ')}. These projects tell the story of your journey — they show what you care about and what you're capable of. Be proud of them. They are proof of your progress.`
-    } else {
-      portfolioComment = 'Your portfolio is just beginning, and that\'s exciting! Every great developer started with an empty GitHub profile. Your first repository will be the seed of something wonderful.'
-    }
-
-    // ============================================================
-    // 趋势分析 - 鼓励性语言
-    // ============================================================
-
-    let trendComment = ''
-    if (activityTrend === 'increasing') {
-      trendComment = '🌱 **You\'re growing!** Your activity is trending upward, and that\'s a sign of building momentum. Something is clicking — keep that energy alive. You\'re on a beautiful trajectory.'
-    } else if (activityTrend === 'stable') {
-      trendComment = '🌊 **Steady and strong.** You\'re maintaining consistent activity, and that stability is a foundation for growth. Reliable progress is how great careers are built — one step at a time.'
-    } else {
-      trendComment = '🌸 **A moment of pause.** We all have seasons. Sometimes we step back, and that\'s okay. When you\'re ready, we\'ll be here to support you as you pick up where you left off.'
-    }
-
-    // ============================================================
-    // 人文关怀的工程建议
-    // ============================================================
-
-    const recommendations = improvementAreas.length > 0 
-      ? improvementAreas.map((area, i) => `${i + 1}. ${area}`).join('\n')
-      : 'Keep doing what you\'re doing. And remember: growth is not linear. Every commit, even the small ones, is a step forward. Be kind to yourself along the way.'
-
-    // ============================================================
-    // 构建最终的温暖+权威报告
-    // ============================================================
-
-    return `## 🌟 Engineering Growth Report
-
-### 👨‍💻 About You
-**${profile.name}** · @${profile.username} · ${profile.followers} followers · ${profile.repos} repositories
-
-### 🏅 Your Engineering Journey
-**${overallRating}** · ${ratingDescription}
-*Score: ${overallScore}/100 (Productivity: ${productivityScore}/100 · Consistency: ${consistencyScore}/100)*
-
-> ${encouragement}
-
----
-
-### 🛠️ Your Technology Story
-
-**Your Stack**: ${technology.primaryLanguages.join(', ')}
-**Frameworks**: ${technology.frameworks.join(', ') || 'Building your toolkit'}
-**Experience**: ${technology.experienceSignals.join(', ') || 'You\'re just getting started, and that\'s wonderful'}
-
-**What we see in you**:
-${techDepthComment}
-
----
-
-### 📈 Your Engineering Growth
-
-**On Consistency**:
-${maturityComment}
-
-**On Productivity**:
-${productivityComment}
-
-**On Your Momentum**:
-${trendComment}
-
----
-
-### 📦 Your Projects
-
-${portfolioComment}
-
-**Your Notable Repositories**:
-${topProjects.length > 0 
-  ? topProjects.map((p: string) => `- \`${p}\``).join('\n')
-  : '- Your first repository is waiting to be born. We can\'t wait to see what you create.'}
-
----
-
-### 💡 Gentle Suggestions for Your Journey
-
-${recommendations}
-
----
-
-### 🎯 Looking Ahead
-
-We believe in your potential. Here\'s what we see:
-
-1. **Your Strengths**: ${technology.primaryLanguages.length > 1 ? `Your curiosity across ${technology.primaryLanguages.join(', ')}` : `Your growing expertise in ${primaryLang}`}
-
-2. **Opportunities to Explore**: ${improvementAreas.length > 0 ? improvementAreas.join('; ') : 'The world is full of possibilities. Keep exploring, keep building.'}
-
-3. **Your Path Forward**: ${activityTrend === 'increasing' ? 'You\'re building momentum. Lean into it — this is your time.' : activityTrend === 'stable' ? 'You\'re building a solid rhythm. Trust it.' : 'Take the time you need. Your journey is your own, and it\'s beautiful.'}
-
----
-
-### 💌 A Note From Us
-
-Engineering is not just about code — it\'s about curiosity, resilience, and the courage to keep learning even when things get hard. Every line you write is a step toward becoming the developer you want to be.
-
-We see your effort. We celebrate your progress. And we're honored to be part of your journey.
-
-Keep building. Keep growing. Keep being you.
-
-With warmth and encouragement,
-**GitInsight AI**
-
----
-*Generated with ❤️ by GitInsight AI — Your Engineering Growth Partner*`
+    return callAI(prompt, systemPrompt, context)
   }
 
-  // ============================================================
-  // Resume Summary - 温暖+专业版本
-  // ============================================================
-  
-static async generateResumeSummary(context: DeveloperContext): Promise<string> {
-  await new Promise(resolve => setTimeout(resolve, 1500))
+  // 生成 README
+  static async generateRepositoryReadme(
+    repoName: string, 
+    description: string, 
+    languages: string[]
+  ): Promise<string> {
+    const systemPrompt = `你是一位资深技术文档专家，擅长为开源项目撰写专业的 README 文档。
+README 要结构清晰、内容完整、有吸引力。
+使用 Markdown 格式，包含 emoji 和代码块。`
 
-  const { profile, technology, engineering } = context
-  const primaryLang = technology.primaryLanguages[0] || 'software development'
-  const allLangs = technology.primaryLanguages.join(', ')
-  const topProjects = engineering.topRepositories.slice(0, 3)
+    const prompt = `
+为以下 GitHub 仓库生成一份专业的 README 文档：
 
-  // ============================================================
-  // 计算经验等级
-  // ============================================================
+- 仓库名: ${repoName}
+- 描述: ${description || '一个现代化的软件项目'}
+- 技术栈: ${languages.join(', ') || '现代技术栈'}
 
-  const totalRepos = profile.repos
-  const score = engineering.productivityScore
-
-  let experienceLevel = ''
-  let yearsEquiv = ''
-  let seniorityBadge = ''
-
-  if (score >= 80 && totalRepos >= 8) {
-    experienceLevel = 'Senior Software Engineer'
-    yearsEquiv = '5+ years equivalent experience'
-    seniorityBadge = '🏆 Senior Level'
-  } else if (score >= 65 && totalRepos >= 5) {
-    experienceLevel = 'Mid-Level Software Engineer'
-    yearsEquiv = '3-5 years equivalent experience'
-    seniorityBadge = '📈 Mid-Senior Level'
-  } else if (score >= 50 && totalRepos >= 3) {
-    experienceLevel = 'Junior Software Engineer'
-    yearsEquiv = '1-3 years equivalent experience'
-    seniorityBadge = '🌱 Junior-Mid Level'
-  } else {
-    experienceLevel = 'Associate Software Engineer'
-    yearsEquiv = '0-1 years equivalent experience'
-    seniorityBadge = '📚 Entry Level'
+请包含以下章节：
+1. 项目标题和简介（吸引人）
+2. 核心功能列表（3-5项，带 emoji）
+3. 技术架构说明
+4. 快速开始指南（安装、配置、运行）
+5. 贡献指南
+6. 许可证说明（MIT）`
+    
+    return callAI(prompt, systemPrompt)
   }
 
-  // ============================================================
-  // 技能评级
-  // ============================================================
+  // 生成发布说明
+  static async generateReleaseNotes(commits: any[]): Promise<string> {
+    const systemPrompt = `你是一位技术项目经理，擅长为软件版本生成专业的发布说明。
+发布说明要清晰、专业、易于理解。
+使用 Markdown 格式。`
 
-  const primarySkill = primaryLang
-  const secondarySkills = technology.primaryLanguages.slice(1).join(', ')
-  const hasMultipleLangs = technology.primaryLanguages.length >= 2
+    const commitMessages = commits.length > 0 
+      ? commits.map((c: any) => `- ${c.message}`).join('\n')
+      : '- 初始项目发布\n- GitHub 集成\n- AI 驱动分析\n- 数据可视化'
 
-  let skillLevel = ''
-  if (score >= 75) {
-    skillLevel = `Advanced proficiency in ${primarySkill} with ${hasMultipleLangs ? `additional expertise in ${secondarySkills}` : 'deep specialization'}`
-  } else if (score >= 55) {
-    skillLevel = `Solid working knowledge of ${primarySkill}${hasMultipleLangs ? ` and growing experience with ${secondarySkills}` : ''}`
-  } else {
-    skillLevel = `Foundational knowledge of ${primarySkill} with demonstrated learning capability`
+    const prompt = `
+根据以下提交记录生成一份专业的发布说明：
+
+提交记录：
+${commitMessages}
+
+请生成包含以下部分的发布说明：
+1. 版本号和发布日期（使用当前日期）
+2. 新功能列表
+3. 改进项
+4. Bug 修复
+5. 贡献者致谢
+
+版本号建议 v1.0.0，日期使用今天。`
+    
+    return callAI(prompt, systemPrompt)
   }
-
-  // ============================================================
-  // 项目经验描述
-  // ============================================================
-
-  let projectDescription = ''
-  if (topProjects.length >= 3) {
-    projectDescription = `Developed and maintained ${topProjects.length} active repositories including ${topProjects.join(', ')}. Demonstrates consistent project delivery and technical ownership.`
-  } else if (topProjects.length >= 1) {
-    projectDescription = `Active contributor to ${topProjects.join(', ')} with focus on ${primaryLang} development.`
-  } else {
-    projectDescription = 'Building a portfolio of software projects with a focus on quality and maintainability.'
-  }
-
-  // ============================================================
-  // 核心能力
-  // ============================================================
-
-  const coreCompetencies = [
-    `${primaryLang} development`,
-    ...(technology.primaryLanguages.slice(1).map(l => `${l}`)),
-    'Version control (Git)',
-    ...(engineering.consistencyScore >= 70 ? ['Consistent delivery track record'] : []),
-    ...(technology.primaryLanguages.length >= 2 ? ['Multi-language adaptability'] : []),
-  ].slice(0, 5)
-
-  // ============================================================
-  // 构建权威简历摘要
-  // ============================================================
-
-  return `## 📄 Professional Resume Summary
-
-### 👤 Candidate Profile
-
-**${profile.name}**
-${profile.bio || 'Software Engineer'}
-${seniorityBadge} · ${yearsEquiv}
-
----
-
-### 💼 Professional Summary
-
-${experienceLevel} with demonstrated capability in ${allLangs}. ${projectDescription}
-
-**Key Qualifications**:
-- ${skillLevel}
-- ${engineering.consistencyScore >= 70 ? 'Demonstrated engineering consistency with strong delivery practices' : 'Building reliable engineering habits with consistent growth'}
-- ${engineering.productivityScore >= 60 ? 'Proven ability to maintain productive development velocity' : 'Developing strong coding velocity with increasing output'}
-- ${totalRepos >= 3 ? `${totalRepos} active repositories maintained` : 'Actively building a professional portfolio'}
-
----
-
-### 🛠️ Technical Competencies
-
-| Category | Skills |
-|----------|--------|
-| **Primary Languages** | ${technology.primaryLanguages.join(', ')} |
-| **Frameworks** | ${technology.frameworks.join(', ') || 'Modern development frameworks'} |
-| **Tools & Practices** | Git, GitHub, Code Review, CI/CD Awareness |
-| **Engineering Practices** | ${engineering.consistencyScore >= 70 ? 'Consistent delivery, Code quality focus' : 'Growing discipline, Learning best practices'} |
-
----
-
-### 📊 Performance Metrics
-
-| Metric | Score | Assessment |
-|--------|-------|------------|
-| **Productivity** | ${engineering.productivityScore}/100 | ${engineering.productivityScore >= 70 ? 'Above average output' : engineering.productivityScore >= 50 ? 'Solid productivity with growth potential' : 'Building productive habits'} |
-| **Consistency** | ${engineering.consistencyScore}/100 | ${engineering.consistencyScore >= 70 ? 'Strong delivery consistency' : engineering.consistencyScore >= 50 ? 'Developing consistent habits' : 'Establishing regular development rhythm'} |
-| **Activity Trend** | ${engineering.activityTrend} | ${engineering.activityTrend === 'increasing' ? '📈 Positive growth trajectory' : engineering.activityTrend === 'stable' ? '📊 Steady and reliable' : '📉 Room for renewed engagement'} |
-
----
-
-### 📂 Representative Projects
-
-${topProjects.length > 0 
-  ? topProjects.map((p: string) => `- **${p}**: ${primaryLang} development project demonstrating practical engineering skills`).join('\n')
-  : '- Portfolio in active development'}
-
----
-
-### 🎯 Career Objectives
-
-${experienceLevel} seeking opportunities to:
-- Contribute to meaningful software projects
-- Collaborate with engineering teams
-- Continuously develop technical expertise
-- Deliver high-quality, maintainable code
-
----
-
-### 🏅 Professional Profile
-
-**GitHub Activity**: ${profile.repos} repositories · ${profile.followers} followers
-**Technical Focus**: ${allLangs}
-**Development Philosophy**: ${engineering.consistencyScore >= 70 ? 'Consistent, reliable delivery' : 'Continuous learning and improvement'}
-
----
-
-*This professional summary is generated based on verified GitHub activity data. Actual experience and qualifications may vary. We recommend customizing this summary to reflect your full professional background.*
-
----
-*Generated by GitInsight AI — Professional Engineering Intelligence Platform*`
 }
-  // ============================================================
-  // Generate Repository README - 温暖版本
-  // ============================================================
-  
-static async generateRepositoryReadme(repoInfo: any): Promise<string> {
-  await new Promise(resolve => setTimeout(resolve, 2000))
 
-  const {
-    name,
-    description,
-    languages,
-    stars,
-    forks,
-    issues,
-    createdAt,
-    updatedAt,
-    url,
-    owner,
-  } = repoInfo
-
-  const primaryLang = languages[0] || 'Software Development'
-  const allLangs = languages.join(', ')
-
-  // 根据仓库信息生成不同的徽章
-  const badges = [
-    `![License](https://img.shields.io/badge/License-MIT-green.svg)`,
-    `![Stars](https://img.shields.io/github/stars/${owner}/${name}?style=social)`,
-    `![Forks](https://img.shields.io/github/forks/${owner}/${name}?style=social)`,
-    `![Issues](https://img.shields.io/github/issues/${owner}/${name})`,
-  ].join(' ')
-
-  return `# ${name}
-
-${badges}
-
-${description}
-
----
-
-## 📖 Table of Contents
-
-- [Overview](#-overview)
-- [Features](#-features)
-- [Tech Stack](#-tech-stack)
-- [Architecture](#-architecture)
-- [Getting Started](#-getting-started)
-- [Project Structure](#-project-structure)
-- [Contributing](#-contributing)
-- [License](#-license)
-- [Acknowledgments](#-acknowledgments)
-
----
-
-## 📋 Overview
-
-**${name}** is a professional-grade software project built with ${allLangs}. This repository demonstrates modern engineering practices including clean architecture, version control best practices, and maintainable code design.
-
-### Key Metrics
-
-| Metric | Value |
-|--------|-------|
-| **Primary Language** | ${primaryLang} |
-| **Total Languages** | ${languages.length} |
-| **Stars** | ⭐ ${stars} |
-| **Forks** | 🍴 ${forks} |
-| **Open Issues** | 🐛 ${issues} |
-| **Created** | ${createdAt} |
-| **Last Updated** | ${updatedAt} |
-
----
-
-## ✨ Features
-
-${languages.map((lang: string) => `- **${lang}** core implementation with best practices`).join('\n')}
-- Clean, maintainable codebase
-- Version control with Git
-- Well-documented architecture
-- ${stars > 0 ? `⭐ ${stars} stars from the community` : 'Ready for community engagement'}
-
----
-
-## 🛠️ Tech Stack
-
-| Category | Technology |
-|----------|------------|
-| **Primary Language** | ${primaryLang} |
-| **Additional Languages** | ${languages.slice(1).join(', ') || 'N/A'} |
-| **Version Control** | Git / GitHub |
-| **Development Environment** | Modern IDE |
-
-### Language Distribution
-
-${languages.map((lang: string ) => `- **${lang}**: Core implementation language`).join('\n')}
-
----
-
-## 🏗️ Architecture
-
-This project follows a modular, component-based architecture designed for:
-
-- **Scalability**: Easy to extend and maintain
-- **Testability**: Components designed for unit testing
-- **Readability**: Clear separation of concerns
-- **Reusability**: Shared components across the codebase
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- ${primaryLang} development environment
-- Git
-- (Add specific requirements here)
-
-### Installation
-
-\`\`\`bash
-# Clone the repository
-git clone ${url}.git
-cd ${name}
-
-# Install dependencies
-# (Add specific install commands)
-
-# Run the project
-# (Add specific run commands)
-\`\`\`
-
-### Configuration
-
-Create a configuration file based on the template:
-
-\`\`\`bash
-cp .env.example .env
-# Edit .env with your settings
-\`\`\`
-
----
-
-## 📁 Project Structure
-
-\`\`\`
-${name}/
-├── src/                    # Source code
-│   ├── components/         # Reusable components
-│   ├── pages/              # Page components
-│   ├── services/           # Business logic
-│   ├── utils/              # Utility functions
-│   └── types/              # TypeScript types
-├── tests/                  # Test files
-├── docs/                   # Documentation
-├── .env.example            # Environment variables template
-├── package.json            # Dependencies
-└── README.md               # This file
-\`\`\`
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Here's how you can help:
-
-### Development Process
-
-1. **Fork** the repository
-2. **Clone** your fork
-3. **Create** a feature branch
-4. **Commit** your changes
-5. **Push** to your branch
-6. **Open** a Pull Request
-
-### Commit Convention
-
-We follow [Conventional Commits](https://www.conventionalcommits.org/):
-
-- \`feat:\` New feature
-- \`fix:\` Bug fix
-- \`docs:\` Documentation
-- \`style:\` Code style
-- \`refactor:\` Code refactoring
-- \`test:\` Testing
-- \`chore:\` Maintenance
-
-### Code Quality
-
-- Run tests locally before submitting
-- Follow the established code style
-- Write meaningful commit messages
-- Add tests for new features
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- Built with ❤️ by @${owner}
-- ${stars > 0 ? `Thanks to ${stars} stars from the community!` : 'Open to contributions and feedback'}
-
----
-
-## 📧 Contact
-
-**Maintainer**: @${owner}
-**Repository**: ${url}
-
----
-
-<div align="center">
-
-### ⭐ If you find this project useful, please consider giving it a star!
-
-*Generated with ❤️ by GitInsight AI — Professional Engineering Intelligence Platform*
-
-</div>`
-}
-}
+// 导出默认对象，兼容现有导入方式
 export default AIService
