@@ -11,7 +11,6 @@ import {
   Sparkles, 
   Loader2, 
   FileText, 
-  BookOpen, 
   User, 
   TrendingUp,
   Code2,
@@ -22,7 +21,6 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import AIService from "@/services/ai.service"
 import AIContextBuilder from "@/services/ai-context-builder"
 
 async function fetchAIData(accessToken: string) {
@@ -38,7 +36,6 @@ export default function AIPage() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<string | null>(null)
   const [activeFeature, setActiveFeature] = useState<string | null>(null)
-  const [errorDetail, setErrorDetail] = useState<string | null>(null)
 
   const { data: analyticsData, isLoading } = useQuery({
     queryKey: ["ai-analytics"],
@@ -46,73 +43,86 @@ export default function AIPage() {
     enabled: !!session?.accessToken,
   })
 
-  const handleAIAction = async (
-    action: () => Promise<string>,
-    featureName: string
-  ) => {
+  // ✅ 通过 API 路由调用 AI 服务
+  const callAIAction = async (action: string, payload: any) => {
+    console.log("🔍 [PAGE] 调用 AI API:", action, payload)
+    
+    const response = await fetch("/api/ai/insight", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, ...payload }),
+    })
+
+    console.log("🔍 [PAGE] API 响应状态:", response.status)
+    
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || "AI 调用失败")
+    return data.result
+  }
+
+  const generateInsights = async () => {
     if (!analyticsData) return
     setLoading(true)
-    setActiveFeature(featureName)
+    setActiveFeature("analyze")
     setResult(null)
-    setErrorDetail(null)
 
     try {
-      const response = await action()
-      setResult(response)
+      const { user, repos, events, metrics } = analyticsData
+      const context = AIContextBuilder.buildContext(user, repos, events, metrics)
+      
+      const result = await callAIAction("analyze", { context })
+      setResult(result)
     } catch (error: any) {
-      console.error('AI Error:', error)
-      // 显示更详细的错误信息
-      const errorMsg = error?.message || error?.toString() || '未知错误'
-      setErrorDetail(errorMsg)
-      setResult(`## ❌ AI 调用失败
-
-**错误信息**: ${errorMsg}
-
-### 可能的原因：
-1. **API Key 未配置或无效**：请在 \`.env.local\` 中检查 \`AGNES_API_KEY\`
-2. **网络连接问题**：请检查网络是否正常
-3. **API 服务暂时不可用**：请稍后重试
-
-### 解决方法：
-1. 访问 https://agnes-ai.cn/ 注册并获取 API Key
-2. 在 \`.env.local\` 中添加 \`AGNES_API_KEY=你的密钥\`
-3. 重启开发服务器
-
-### 当前使用模板响应 🚀`)
+      console.error("AI Error:", error)
+      setResult(`## ❌ AI 调用失败\n\n**错误信息**: ${error.message || "未知错误"}\n\n请稍后重试。`)
     } finally {
       setLoading(false)
     }
   }
 
-  const generateInsights = async () => {
-    const { user, repos, events, metrics } = analyticsData!
-    const context = AIContextBuilder.buildContext(user, repos, events, metrics)
-    return AIService.generateInsight(context)
-  }
-
   const generateResume = async () => {
-    const { user, repos, events, metrics } = analyticsData!
-    const context = AIContextBuilder.buildContext(user, repos, events, metrics)
-    return AIService.generateResumeSummary(context)
+    if (!analyticsData) return
+    setLoading(true)
+    setActiveFeature("resume")
+    setResult(null)
+
+    try {
+      const { user, repos, events, metrics } = analyticsData
+      const context = AIContextBuilder.buildContext(user, repos, events, metrics)
+      
+      const result = await callAIAction("resume", { context })
+      setResult(result)
+    } catch (error: any) {
+      console.error("AI Error:", error)
+      setResult(`## ❌ AI 调用失败\n\n**错误信息**: ${error.message || "未知错误"}`)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const generateReadme = async () => {
-    const { repos, metrics } = analyticsData!
-    const repo = repos[0] || { name: "my-project", description: "A modern software project" }
-    const languages = metrics.technologyProfile.languages.map((l: any) => l.name)
-    return AIService.generateRepositoryReadme(repo.name, repo.description, languages)
-  }
+    if (!analyticsData) return
+    setLoading(true)
+    setActiveFeature("readme")
+    setResult(null)
 
-  const generateReleaseNotes = async () => {
-    const { events } = analyticsData!
-    const recentCommits = events
-      .filter((e: any) => e.type === 'PushEvent')
-      .slice(0, 10)
-      .map((e: any) => ({
-        message: e.payload?.commits?.[0]?.message || 'Update',
-        date: new Date(e.created_at).toLocaleDateString()
-      }))
-    return AIService.generateReleaseNotes(recentCommits)
+    try {
+      const { repos, metrics } = analyticsData
+      const repo = repos[0] || { name: "my-project", description: "A modern software project" }
+      const languages = metrics.technologyProfile.languages.map((l: any) => l.name)
+      
+      const result = await callAIAction("readme", {
+        repoName: repo.name,
+        description: repo.description,
+        languages,
+      })
+      setResult(result)
+    } catch (error: any) {
+      console.error("AI Error:", error)
+      setResult(`## ❌ AI 调用失败\n\n**错误信息**: ${error.message || "未知错误"}`)
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (isLoading) {
@@ -223,12 +233,12 @@ export default function AIPage() {
         </CardContent>
       </Card>
 
-      {/* 功能按钮 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 功能按钮 - 3 个 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Button
           variant={activeFeature === "analyze" ? "default" : "outline"}
           className="h-auto py-4 flex flex-col items-center gap-2"
-          onClick={() => handleAIAction(generateInsights, "analyze")}
+          onClick={generateInsights}
           disabled={loading}
         >
           <TrendingUp className="w-5 h-5" />
@@ -239,7 +249,7 @@ export default function AIPage() {
         <Button
           variant={activeFeature === "resume" ? "default" : "outline"}
           className="h-auto py-4 flex flex-col items-center gap-2"
-          onClick={() => handleAIAction(generateResume, "resume")}
+          onClick={generateResume}
           disabled={loading}
         >
           <User className="w-5 h-5" />
@@ -250,23 +260,12 @@ export default function AIPage() {
         <Button
           variant={activeFeature === "readme" ? "default" : "outline"}
           className="h-auto py-4 flex flex-col items-center gap-2"
-          onClick={() => handleAIAction(generateReadme, "readme")}
+          onClick={generateReadme}
           disabled={loading}
         >
           <FileText className="w-5 h-5" />
           <span className="text-sm">Generate README</span>
           <span className="text-xs text-muted-foreground font-normal">For your repository</span>
-        </Button>
-
-        <Button
-          variant={activeFeature === "release" ? "default" : "outline"}
-          className="h-auto py-4 flex flex-col items-center gap-2"
-          onClick={() => handleAIAction(generateReleaseNotes, "release")}
-          disabled={loading}
-        >
-          <BookOpen className="w-5 h-5" />
-          <span className="text-sm">Release Notes</span>
-          <span className="text-xs text-muted-foreground font-normal">From recent commits</span>
         </Button>
       </div>
 
@@ -290,9 +289,7 @@ export default function AIPage() {
               <Sparkles className="w-4 h-4 text-yellow-500" />
               AI Response
             </CardTitle>
-            <Badge variant="outline">
-              {errorDetail ? 'Template Mode' : 'AI Generated'}
-            </Badge>
+            <Badge variant="outline">AI Generated</Badge>
           </CardHeader>
           <CardContent>
             <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-li:my-0.5 prose-code:text-sm prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
