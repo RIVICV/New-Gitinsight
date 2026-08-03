@@ -6,7 +6,7 @@ import AIService from "@/services/ai.service"
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { context, action } = body
+    const { action, context, repoName, description, languages } = body
 
     console.log("🔍 [API] 收到 AI 请求:", action)
 
@@ -19,13 +19,9 @@ export async function POST(request: NextRequest) {
         result = await AIService.generateResumeSummary(context as DeveloperContext)
         break
       case "readme":
-        const { repoName, description, languages } = body
         result = await AIService.generateRepositoryReadme(repoName, description, languages)
         break
-      case "release":
-        const { commits } = body
-        result = await AIService.generateReleaseNotes(commits)
-        break
+      // ✅ 删除 release 相关的 case
       default:
         return NextResponse.json({ error: "未知操作" }, { status: 400 })
     }
