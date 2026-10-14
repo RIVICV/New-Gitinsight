@@ -389,15 +389,6 @@ This project is licensed under the MIT License.
 
 ---
 
-## 📧 Contact / 联系方式
-
-**RIVICV** — [GitHub](https://github.com/RIVICV)
-
-**Live Demo / 在线演示**: [https://new-gitinsight-eta.vercel.app](https://new-gitinsight-eta.vercel.app)
-
-**Project Link / 项目链接**: [https://github.com/RIVICV/New-Gitinsight](https://github.com/RIVICV/New-Gitinsight)
-
----
 
 <div align="center">
 
